@@ -1,10 +1,10 @@
 {
   "name": "spb-spy",
   "version": "1.0.0",
-  "description": "An Electron application with React and TypeScript",
+  "description": "Visor de tráfico Sparkplug B sobre MQTT",
   "main": "./out/main/index.js",
-  "author": "example.com",
-  "homepage": "https://electron-vite.org",
+  "author": "Emiliano Marino <ejmarino@gmail.com>",
+  "homepage": "https://github.com/ejmarino/spb-spy",
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint --cache .",
@@ -23,7 +23,6 @@
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
-    "lucide-react": "^1.51.0",
     "mqtt": "^5.16.0",
     "sparkplug-payload": "^1.0.3"
   },
@@ -42,6 +41,7 @@
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
+    "lucide-react": "^1.51.0",
     "prettier": "^3.7.4",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",

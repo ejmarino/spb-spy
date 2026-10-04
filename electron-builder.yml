@@ -1,9 +1,10 @@
-appId: com.electron.app
+appId: ar.horizonbytes.spbspy
 productName: spb-spy
 directories:
   buildResources: build
 files:
   - '!**/.vscode/*'
+  - '!.devcontainer/*'
   - '!src/*'
   - '!electron.vite.config.{js,ts,mjs,cjs}'
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
@@ -32,7 +33,6 @@ linux:
   target:
     - AppImage
     - deb
-  maintainer: electronjs.org
   category: Utility
 appImage:
   artifactName: ${name}-${version}.${ext}

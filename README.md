@@ -281,13 +281,17 @@ Los cambios en el proceso principal (`src/main`) requieren reiniciar la app.
 ### Empaquetado
 
 ```bash
-npm run build:win
-npm run build:linux
+npm run build:linux   # AppImage y .deb
+npm run build:win     # instalador .exe
 npm run build:mac
 ```
 
-Estos scripts vienen de la plantilla de electron-vite y usan electron-builder.
-Todavía no se probaron con este proyecto.
+Los scripts usan electron-builder y dejan los paquetes en `dist/`. Los de Linux
+y Windows se pueden generar desde el devcontainer; el de macOS no se probó.
+
+El instalador de Windows instala por usuario, sin pedir permisos de
+administrador. No está firmado, así que SmartScreen muestra una advertencia al
+ejecutarlo.
 
 ### Estructura
 
