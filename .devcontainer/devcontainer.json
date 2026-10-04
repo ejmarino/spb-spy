@@ -1,0 +1,51 @@
+{
+  "name": "spb-spy (Electron)",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "features": {
+    // Escritorio liviano accesible por navegador (noVNC) para ver la ventana de la app
+    "ghcr.io/devcontainers/features/desktop-lite:1": {
+      "password": "noPassword"
+    }
+  },
+  "runArgs": [
+    // Chromium se cuelga con el /dev/shm de 64MB que trae Docker por defecto
+    "--shm-size=1g"
+  ],
+  "containerEnv": {
+    // El sandbox de Chromium no funciona dentro de un contenedor sin privilegios
+    "ELECTRON_DISABLE_SANDBOX": "1",
+    // ELECTRON_DISABLE_SANDBOX no alcanza para el zygote: electron-vite lee
+    // NO_SANDBOX y le pasa --no-sandbox a Electron en dev/preview
+    "NO_SANDBOX": "1",
+    // El bind mount de Windows no avisa los cambios de archivos: sin sondeo
+    // Vite no se entera de las ediciones y el hot reload no funciona
+    "CHOKIDAR_USEPOLLING": "1"
+  },
+  "mounts": [
+    // node_modules en un volumen: mas rapido que el bind mount de Windows y
+    // evita mezclar binarios de Linux con los del host
+    "source=spb-spy-node_modules,target=${containerWorkspaceFolder}/node_modules,type=volume"
+  ],
+  "forwardPorts": [6080],
+  "portsAttributes": {
+    "5173": {
+      "label": "5174"
+    },
+    "6080": {
+      "label": "Escritorio (noVNC)",
+      "onAutoForward": "silent"
+    }
+  },
+  "postCreateCommand": "sudo chown node:node node_modules && if [ -f package.json ]; then npm install; fi",
+  "remoteUser": "node",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode"
+      ]
+    }
+  }
+}
