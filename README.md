@@ -293,6 +293,22 @@ El instalador de Windows instala por usuario, sin pedir permisos de
 administrador. No está firmado, así que SmartScreen muestra una advertencia al
 ejecutarlo.
 
+### Releases
+
+Al subir un tag de versión (`v1.2.3`) se empaquetan Linux y Windows en CI:
+
+- En GitHub (`.github/workflows/release.yml`) se crea el release del tag con los
+  paquetes como assets.
+- En GitLab (`.gitlab-ci.yml`) los paquetes quedan como artifacts del pipeline.
+
+El tag tiene que coincidir con la versión de `package.json`; si no, el build
+falla.
+
+```bash
+npm version 1.2.3   # actualiza package.json y crea el commit y el tag v1.2.3
+git push <remoto> main v1.2.3
+```
+
 ### Estructura
 
 | Carpeta              | Contenido                                                                                                   |

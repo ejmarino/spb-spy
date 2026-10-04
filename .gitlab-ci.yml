@@ -1,0 +1,39 @@
+# Empaqueta la app para Linux y Windows cuando se sube un tag de versión
+# (v1.2.3). Los paquetes quedan como artifacts de cada job.
+
+stages:
+  - build
+
+.build:
+  stage: build
+  # Node 24 con Wine: electron-builder lo necesita para armar el instalador
+  # de Windows desde Linux
+  image: electronuserland/builder:24-wine
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+/
+  before_script:
+    - |
+      version="v$(node -p "require('./package.json').version")"
+      if [ "$version" != "$CI_COMMIT_TAG" ]; then
+        echo "El tag $CI_COMMIT_TAG no coincide con la versión de package.json ($version)"
+        exit 1
+      fi
+    - npm ci
+
+build:linux:
+  extends: .build
+  script:
+    # --publish never: electron-builder no intenta subir nada por su cuenta
+    - npm run build:linux -- --publish never
+  artifacts:
+    paths:
+      - dist/*.AppImage
+      - dist/*.deb
+
+build:windows:
+  extends: .build
+  script:
+    - npm run build:win -- --publish never
+  artifacts:
+    paths:
+      - dist/*.exe
