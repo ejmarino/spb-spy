@@ -1,5 +1,15 @@
 import { useState } from 'react'
-import { Lock, Pencil, Play, Plus, ShieldCheck, Square, Trash, TriangleAlert } from 'lucide-react'
+import {
+  EyeOff,
+  Lock,
+  Pencil,
+  Play,
+  Plus,
+  ShieldCheck,
+  Square,
+  Trash,
+  TriangleAlert
+} from 'lucide-react'
 import { connectionLabel, connectionUrl, newConnection, topicWarning } from '@shared/connection'
 import type { ConnectionConfig, RebirthPolicy } from '@shared/types'
 import { ConnectionStatePill, KindIcon } from '../components/badges'
@@ -51,7 +61,7 @@ function ConnectionCard({
       <div className="card-url">{connectionUrl(connection)}</div>
 
       <dl className="card-facts">
-        <dt>Cliente / Host ID</dt>
+        <dt>{connection.announceHost ? 'Cliente / Host ID' : 'Cliente'}</dt>
         <dd>{connection.clientId}</dd>
         <dt>Tópico</dt>
         <dd>
@@ -86,6 +96,19 @@ function ConnectionCard({
             <ShieldCheck size={12} /> Sparkplug Aware
           </span>
         ) : null}
+        {connection.announceHost ? null : (
+          <span
+            className="tag"
+            title={
+              connection.rebirthPolicy === 'never'
+                ? 'No publica su STATE ni pide rebirth: no deja nada propio en el broker'
+                : 'No publica su STATE de host. Todavía puede pedir rebirth'
+            }
+          >
+            <EyeOff size={12} />
+            {connection.rebirthPolicy === 'never' ? 'Solo escucha' : 'Sin anunciarse'}
+          </span>
+        )}
         {model?.nodes.size ? (
           <span className="tag tag-plain">
             {plural(model.nodes.size, 'nodo')} · {plural(devices, 'device')} ·{' '}

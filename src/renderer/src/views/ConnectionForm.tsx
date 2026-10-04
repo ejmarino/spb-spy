@@ -19,7 +19,7 @@ interface ConnectionFormProps {
 const REBIRTH_OPTIONS: { value: RebirthPolicy; label: string }[] = [
   { value: 'missing-birth', label: 'Si falta el BIRTH o hay un salto de secuencia' },
   { value: 'alias', label: 'Solo si llegan alias que no se pueden resolver' },
-  { value: 'never', label: 'Nunca (solo escuchar)' }
+  { value: 'never', label: 'Nunca' }
 ]
 
 function Field({
@@ -203,7 +203,7 @@ export function ConnectionForm({
 
           <Field
             label="Nombre de cliente"
-            hint="Client ID de MQTT. También es el Host ID con el que la app se anuncia en spBv1.0/STATE/…"
+            hint="Client ID de MQTT. Si la app se anuncia como host, también es su Host ID"
             error={errors.clientId}
           >
             <input
@@ -212,6 +212,13 @@ export function ConnectionForm({
               onChange={(e) => set('clientId', e.target.value)}
             />
           </Field>
+
+          <Toggle
+            checked={draft.announceHost}
+            onChange={(checked) => set('announceHost', checked)}
+            label="Anunciarse como host"
+            hint="Publica el STATE de la app en spBv1.0/STATE/… como pide la norma. Desactivado, y con el rebirth en Nunca, la app solo escucha y no publica nada en el broker"
+          />
 
           <Field label="Tópico a escuchar" error={errors.topic}>
             <input
@@ -238,7 +245,11 @@ export function ConnectionForm({
           <div className="field-row">
             <Field
               label="Pedir rebirth"
-              hint="Antes de pedirlo la app se anuncia como host y espera unos segundos a que los nodos publiquen su BIRTH solos"
+              hint={
+                draft.announceHost
+                  ? 'Antes de pedirlo la app se anuncia como host y espera unos segundos a que los nodos publiquen su BIRTH solos'
+                  : 'Antes de pedirlo la app espera unos segundos después de conectar'
+              }
             >
               <select
                 value={draft.rebirthPolicy}

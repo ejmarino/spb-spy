@@ -53,8 +53,9 @@ function statePayload(online: boolean, timestamp: number): string {
 
 /**
  * Una conexion MQTT que se comporta como Host Application de Sparkplug:
- * registra su STATE, decodifica lo que llega y pide rebirth cuando le falta
- * el BIRTH de un nodo para poder resolver sus metricas.
+ * registra su STATE (salvo que la conexion pida no anunciarse), decodifica lo
+ * que llega y pide rebirth cuando le falta el BIRTH de un nodo para poder
+ * resolver sus metricas.
  */
 export class SparkplugSession {
   readonly model: ConnectionModel = createModel()
@@ -104,6 +105,10 @@ export class SparkplugSession {
       await new Promise<void>((resolve) => {
         if (!client.connected) {
           client.end(true, {}, () => resolve())
+          return
+        }
+        if (!this.config.announceHost) {
+          client.end(false, {}, () => resolve())
           return
         }
         // en una desconexion voluntaria el broker no publica el will: se avisa a mano
@@ -170,12 +175,14 @@ export class SparkplugSession {
       connectTimeout: 10_000,
       // la reconexion se maneja aca para que cada intento lleve un will con timestamp nuevo
       reconnectPeriod: 0,
-      will: {
-        topic: this.stateTopic,
-        payload: Buffer.from(statePayload(false, this.sessionTimestamp)),
-        qos: 1,
-        retain: true
-      }
+      will: config.announceHost
+        ? {
+            topic: this.stateTopic,
+            payload: Buffer.from(statePayload(false, this.sessionTimestamp)),
+            qos: 1,
+            retain: true
+          }
+        : undefined
     })
     this.client = client
 
@@ -200,7 +207,9 @@ export class SparkplugSession {
   private onConnect(client: MqttClient): void {
     const { config } = this
     const subscriptions: ISubscriptionMap = { [config.topic]: { qos: 0 } }
-    if (!topicMatches(config.topic, this.stateTopic)) subscriptions[this.stateTopic] = { qos: 1 }
+    if (config.announceHost && !topicMatches(config.topic, this.stateTopic)) {
+      subscriptions[this.stateTopic] = { qos: 1 }
+    }
     if (config.sparkplugAware) subscriptions[CERTIFICATES_PREFIX + config.topic] = { qos: 0 }
 
     client.subscribe(subscriptions, (error, granted) => {
@@ -212,10 +221,12 @@ export class SparkplugSession {
           `El broker rechazó la suscripción${rejected.length ? ` a ${rejected.join(', ')}` : ''}${error ? `: ${error.message}` : ''}`
         )
       }
-      this.publish(client, this.stateTopic, statePayload(true, this.sessionTimestamp), {
-        qos: 1,
-        retain: true
-      })
+      if (config.announceHost) {
+        this.publish(client, this.stateTopic, statePayload(true, this.sessionTimestamp), {
+          qos: 1,
+          retain: true
+        })
+      }
       this.linked = true
       this.reportedError = null
       // la espera entre rebirths sigue valiendo aunque se haya reconectado
@@ -225,7 +236,7 @@ export class SparkplugSession {
       this.hooks.status('connected')
       this.system(
         'info',
-        `Conectado a ${connectionUrl(config)} como host "${config.clientId}". Suscripto a ${Object.keys(subscriptions).join(', ')}`,
+        `Conectado a ${connectionUrl(config)} como ${config.announceHost ? 'host' : 'cliente'} "${config.clientId}"${config.announceHost ? '' : ', sin anunciarse como host'}. Suscripto a ${Object.keys(subscriptions).join(', ')}`,
         'up'
       )
     })
@@ -347,6 +358,7 @@ export class SparkplugSession {
     // el will de una sesion anterior) hay que volver a anunciarse
     const client = this.client
     if (
+      this.config.announceHost &&
       event.self &&
       event.online === false &&
       !event.retained &&

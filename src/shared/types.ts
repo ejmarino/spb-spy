@@ -21,6 +21,8 @@ export interface ConnectionConfig {
   sparkplugAware: boolean
   /** Client ID de MQTT; tambien se usa como Host Application ID de Sparkplug */
   clientId: string
+  /** Publicar el STATE de host. Sin esto la app no deja nada propio en el broker salvo los rebirth */
+  announceHost: boolean
   topic: string
   username: string
   password: string
