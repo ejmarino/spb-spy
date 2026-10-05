@@ -162,6 +162,41 @@ export function leafOf(item: TreeItem): Leaf | undefined {
   return undefined
 }
 
+/** Lo que hace falta de una metrica o de un miembro de UDT para saber si destella */
+type Updated = Pick<Leaf, 'type' | 'value'> & Partial<Pick<Leaf, 'updatedAt' | 'updates'>>
+
+/**
+ * Momento de la ultima actualizacion que destellaria en la metrica o, si es un
+ * UDT, en alguno de sus miembros; 0 si no hay. El primer valor no cuenta.
+ */
+function updateAt(leaf: Updated): number {
+  const template = asTemplate(leaf.type, leaf.value)
+  if (template) return template.metrics.reduce((at, member) => Math.max(at, updateAt(member)), 0)
+  return (leaf.updates ?? 1) > 1 ? (leaf.updatedAt ?? 0) : 0
+}
+
+function latestUpdateAt(item: TreeItem): number {
+  if (!item.metric) {
+    return item.children.reduce((at, child) => Math.max(at, latestUpdateAt(child)), 0)
+  }
+  const leaf = leafOf(item)
+  return leaf ? updateAt(leaf) : 0
+}
+
+/**
+ * Momento de la ultima actualizacion entre lo que cuelga de la fila y no esta en
+ * la lista, sea por una rama colapsada o por el buscador; 0 si no hubo. Con esto
+ * la fila destella en nombre de las metricas que no se ven.
+ */
+export function hiddenUpdateAt(item: TreeItem, listed: Set<TreeItem>): number {
+  let at = 0
+  for (const child of item.children) {
+    // si un hijo no esta en la lista, tampoco lo esta nada de lo que cuelga de el
+    if (!listed.has(child)) at = Math.max(at, latestUpdateAt(child))
+  }
+  return at
+}
+
 /**
  * La fila es una metrica, o un miembro de un UDT, a la que se le puede mandar un
  * comando para cambiarle el valor: tiene un tipo que se puede escribir y el nodo

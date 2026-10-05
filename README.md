@@ -196,7 +196,15 @@ conexión
   device.
 - Columnas: nombre, valor o estado, tipo de dato y hora de la última
   actualización. La unidad se toma de la propiedad `engUnit`.
-- Un valor que cambia se resalta un instante.
+- Un valor que se actualiza destella un instante. Si su fila no está en la
+  lista, porque la rama está colapsada o porque el buscador la filtra, destella
+  el nombre de la primera fila visible por encima: el UDT, el device, el nodo,
+  el grupo o la conexión. Así una rama cerrada muestra que tiene actividad, y
+  queda encendida mientras siguen llegando datos.
+  - El primer valor de una métrica, el del BIRTH, no destella: un rebirth no
+    enciende el árbol.
+  - Una métrica desplegada que quedó fuera de pantalla por el scroll no cuenta
+    como oculta.
 - El buscador filtra por nombre de grupo, nodo, device o métrica, y deja a la
   vista las coincidencias, sus ramas superiores y todo lo que cuelga de ellas.
 - Las listas de más de 60 métricas arrancan colapsadas.
@@ -229,7 +237,7 @@ Las métricas de tipo `Template` se muestran como una rama colapsable:
 
 Un DATA de un UDT trae solo los miembros que cambiaron. La app los combina con
 los que ya conocía: los demás miembros se mantienen, cada uno con su propia hora,
-y se resalta únicamente el que cambió.
+y destella únicamente el que cambió. Con el UDT colapsado destella su nombre.
 
 En la pantalla de eventos un UDT ocupa una sola fila con el resumen; el contenido
 completo se ve en el detalle.

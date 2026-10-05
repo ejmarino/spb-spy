@@ -1612,6 +1612,10 @@ textarea {
 
 .tree-label {
   overflow: hidden;
+  /* el mismo relleno que el valor: da la forma del destello sin mover nada de lugar */
+  margin: -1px -4px;
+  padding: 1px 4px;
+  border-radius: 4px;
   text-overflow: ellipsis;
   user-select: text;
 }
@@ -1708,8 +1712,12 @@ textarea {
   border-color: var(--accent);
 }
 
-/* un valor que acaba de cambiar se enciende un instante */
-.value.is-fresh {
+/*
+ * Un valor que acaba de cambiar se enciende un instante. Si su fila no esta a la
+ * vista, se enciende el nombre de la primera fila visible de su rama.
+ */
+.value.is-fresh,
+.tree-label.is-fresh {
   animation: fresh 1.2s ease-out;
 }
 

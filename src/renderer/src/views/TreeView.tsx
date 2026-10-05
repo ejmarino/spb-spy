@@ -17,7 +17,15 @@ import { ConnectionStatePill, KindIcon, LivenessPill } from '../components/badge
 import { VirtualList } from '../components/VirtualList'
 import { engUnit, formatDateTime, formatTimestamp, formatValue, plural } from '../format'
 import { FLASH_MS, store, useStoreVersion } from '../store'
-import { buildTree, defaultOpen, flattenTree, isWritable, leafOf, type TreeItem } from '../tree'
+import {
+  buildTree,
+  defaultOpen,
+  flattenTree,
+  hiddenUpdateAt,
+  isWritable,
+  leafOf,
+  type TreeItem
+} from '../tree'
 import { CommandPanel } from './CommandPanel'
 
 const ROW_HEIGHT = 28
@@ -43,12 +51,15 @@ function TreeRow({
   item,
   open,
   selected,
+  hiddenUpdateAt,
   onToggle,
   onSelect
 }: {
   item: TreeItem
   open: boolean
   selected: boolean
+  /** Ultima actualizacion entre lo que cuelga de la fila y no esta en la lista */
+  hiddenUpdateAt: number
   onToggle: () => void
   onSelect: () => void
 }): React.JSX.Element {
@@ -61,6 +72,8 @@ function TreeRow({
     !item.parameter &&
     (isReadOnly(metric?.properties) || isReadOnly(item.metric?.properties))
   const now = store.now
+  // lo que cambia debajo sin estar a la vista destella en el nombre de la fila
+  const freshBelow = now - hiddenUpdateAt < FLASH_MS
   // estado del nodo o device del que depende la fila; las ramas intermedias no tienen
   const state = item.node ?? item.device
   const liveness: Liveness | undefined = (state ?? item.owner)?.status
@@ -164,7 +177,8 @@ function TreeRow({
           dead={liveness === 'offline' && !item.metric}
         />
         <span
-          className="tree-label"
+          key={hiddenUpdateAt}
+          className={`tree-label${freshBelow ? ' is-fresh' : ''}`}
           title={item.nodeLevel ? 'Métricas propias del nodo' : item.label}
         >
           {item.label}
@@ -224,6 +238,8 @@ export function TreeView({ active }: { active: boolean }): React.JSX.Element | n
     const isOpen = (item: TreeItem): boolean => overrides.get(item.key) ?? defaultOpen(item)
     return flattenTree(roots, isOpen, query)
   }, [roots, overrides, query])
+  // las filas de la lista, esten o no en pantalla: lo que no esta aca destella en su rama
+  const listed = useMemo(() => new Set(rows), [rows])
   // se busca por clave en cada pasada: el arbol se rearma cuando cambia su forma
   const selected = useMemo(() => {
     let found: TreeItem | undefined
@@ -332,6 +348,7 @@ export function TreeView({ active }: { active: boolean }): React.JSX.Element | n
                   item={item}
                   open={isOpen(item)}
                   selected={item.key === target?.key}
+                  hiddenUpdateAt={hiddenUpdateAt(item, listed)}
                   onToggle={() => toggle(item)}
                   onSelect={() => setSelectedKey(item.key)}
                 />
