@@ -1,11 +1,19 @@
 import { connect, type IClientPublishOptions, type ISubscriptionMap, type MqttClient } from 'mqtt'
 import { connectionUrl } from '@shared/connection'
 import { createModel, nodeKey, type ConnectionModel, type DeviceState } from '@shared/model'
-import { CERTIFICATES_PREFIX, parseTopic, stateTopic, topicMatches } from '@shared/topic'
+import { valueError } from '@shared/command'
+import {
+  CERTIFICATES_PREFIX,
+  commandTopic,
+  parseTopic,
+  stateTopic,
+  topicMatches
+} from '@shared/topic'
 import {
   SPARKPLUG_NAMESPACE,
   type ConnectionConfig,
   type ConnectionState,
+  type MetricCommand,
   type NewEvent,
   type SpMessageType,
   type SpMetric
@@ -14,6 +22,7 @@ import {
   Payload,
   decodeMetricValue,
   decodeProperties,
+  encodeCommand,
   encodeRebirth,
   has,
   inferDatatype,
@@ -136,6 +145,26 @@ export class SparkplugSession {
   requestRebirth(group: string, node: string): void {
     const namespace = this.model.nodes.get(nodeKey(group, node))?.namespace || SPARKPLUG_NAMESPACE
     this.sendRebirth({ namespace, group, node, reason: 'pedido manual', since: Date.now() }, true)
+  }
+
+  /** Escribe una metrica con un NCMD o DCMD. Devuelve el motivo si no se pudo enviar */
+  sendCommand(command: MetricCommand): string | null {
+    const client = this.client
+    if (!client || !this.linked) return 'La conexión no está activa'
+    const error = valueError(command.type, command.value)
+    if (error) return error
+    const node = this.model.nodes.get(nodeKey(command.group, command.node))
+    const scope = command.device === undefined ? node : node?.devices.get(command.device)
+    const metric = scope?.metrics.get(command.metric)
+    const payload = metric && encodeCommand(Date.now(), metric, command)
+    if (!node || !payload) return 'La métrica ya no está en el árbol de datos'
+    this.publish(
+      client,
+      commandTopic(node.namespace || SPARKPLUG_NAMESPACE, node.group, node.id, command.device),
+      payload,
+      { qos: 0, retain: false }
+    )
+    return null
   }
 
   private clearTimers(): void {

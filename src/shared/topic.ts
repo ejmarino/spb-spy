@@ -98,3 +98,15 @@ export function isStandardTopic(filter: string): boolean {
 export function stateTopic(hostId: string): string {
   return `${SPARKPLUG_NAMESPACE}/STATE/${hostId}`
 }
+
+/** Topico de los comandos para un nodo (NCMD) o para uno de sus devices (DCMD) */
+export function commandTopic(
+  namespace: string,
+  group: string,
+  node: string,
+  device?: string
+): string {
+  return device === undefined
+    ? `${namespace}/${group}/NCMD/${node}`
+    : `${namespace}/${group}/DCMD/${node}/${device}`
+}

@@ -74,6 +74,24 @@ export function formatValue(type: string, value: SpValue): string {
   return formatScalar(type, value)
 }
 
+/** Valor de una metrica como texto para editarlo, tal como lo entiende parseCommandValue */
+export function editableValue(type: string, value: SpValue): string {
+  if (value === null) return type === 'Boolean' ? 'false' : ''
+  if (!Array.isArray(value)) return formatScalar(type, value)
+  const separator = type === 'StringArray' || type === 'DateTimeArray' ? '\n' : ', '
+  return value.map((item) => formatScalar(type, item)).join(separator)
+}
+
+/** JSON para mostrar: conserva NaN e Infinity, que JSON.stringify convierte en null */
+export function formatJson(value: SpValue): string {
+  const json = JSON.stringify(
+    value,
+    (_, item) => (typeof item === 'number' && !Number.isFinite(item) ? `\u0000${item}` : item),
+    2
+  )
+  return json.replace(/"\\u0000(NaN|-?Infinity)"/g, '$1')
+}
+
 /** Unidad de ingenieria declarada en las propiedades de la metrica */
 export function engUnit(properties: Record<string, SpProperty> | undefined): string {
   const unit = properties?.engUnit?.value

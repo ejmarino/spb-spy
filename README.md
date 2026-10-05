@@ -20,6 +20,7 @@ Es una app de escritorio hecha con Electron, React y TypeScript.
 - [Árbol de datos](#árbol-de-datos)
 - [UDT (templates)](#udt-templates)
 - [Tipos de datos](#tipos-de-datos)
+- [Envío de comandos](#envío-de-comandos)
 - [Actualizaciones](#actualizaciones)
 - [Limitaciones](#limitaciones)
 - [Desarrollo](#desarrollo)
@@ -33,7 +34,11 @@ Es una app de escritorio hecha con Electron, React y TypeScript.
   o leyendo los BIRTH que guarda un broker Sparkplug Aware.
 - Control de la secuencia (`seq`) de cada nodo y de su `bdSeq`.
 - Detección de tópicos que tienen forma de Sparkplug pero no cumplen la norma.
-- Registro de lo que publica la propia app (su `STATE` y los `NCMD` de rebirth).
+- Escritura de métricas: desde el árbol se envía un comando (`NCMD` o `DCMD`)
+  para cambiarle el valor a una métrica, también a un array o a un miembro de
+  un UDT.
+- Registro de lo que publica la propia app (su `STATE`, los `NCMD` de rebirth y
+  los comandos de escritura).
 - Lista de eventos con filtros por texto, conexión y tipo de mensaje.
 - Árbol de datos en vivo, con el estado de cada nodo y device.
 
@@ -78,7 +83,8 @@ retenido). Al desconectar voluntariamente publica el `offline` antes de cerrar.
 will ni publica ningún `STATE`, así que no deja nada retenido en el broker. Los
 nodos que esperan a un host primario no la van a ver. Todavía puede pedir
 rebirth si la política lo permite; con el rebirth en "Nunca" la app **solo
-escucha**: se suscribe y no publica nada.
+escucha**: se suscribe y no publica nada por su cuenta (sí los
+[comandos](#envío-de-comandos) que se envíen a mano).
 
 **Alias.** Los alias se resuelven con las métricas declaradas en el NBIRTH o
 DBIRTH del nodo o device. Mientras no hay BIRTH, la métrica aparece como
@@ -145,15 +151,15 @@ conexiones suma un buscador. El botón indica cuántas están a la vista.
 **Píldoras por tipo.** Cada una muestra u oculta una categoría, y cada evento
 pertenece a una sola:
 
-| Píldora  | Contiene                                                                        |
-| -------- | ------------------------------------------------------------------------------- |
-| BIRTH    | NBIRTH y DBIRTH                                                                 |
-| DEATH    | NDEATH y DDEATH                                                                 |
-| DATA     | NDATA y DDATA                                                                   |
-| CMD      | NCMD y DCMD publicados por otros hosts                                          |
-| STATE    | STATE de los hosts, tal como los entrega el broker                              |
-| SISTEMA  | Avisos de la app (conexión, rebirth solicitado) y mensajes que no son Sparkplug |
-| ENVIADOS | Lo que publica esta app: su STATE y los NCMD de rebirth                         |
+| Píldora  | Contiene                                                                           |
+| -------- | ---------------------------------------------------------------------------------- |
+| BIRTH    | NBIRTH y DBIRTH                                                                    |
+| DEATH    | NDEATH y DDEATH                                                                    |
+| DATA     | NDATA y DDATA                                                                      |
+| CMD      | NCMD y DCMD publicados por otros hosts                                             |
+| STATE    | STATE de los hosts, tal como los entrega el broker                                 |
+| SISTEMA  | Avisos de la app (conexión, rebirth solicitado) y mensajes que no son Sparkplug    |
+| ENVIADOS | Lo que publica esta app: su STATE, los NCMD de rebirth y los comandos de escritura |
 
 Apagando todas menos **ENVIADOS** queda solo lo que publicó la app.
 
@@ -194,6 +200,9 @@ conexión
 - El buscador filtra por nombre de grupo, nodo, device o métrica, y deja a la
   vista las coincidencias, sus ramas superiores y todo lo que cuelga de ellas.
 - Las listas de más de 60 métricas arrancan colapsadas.
+- Un clic sobre una métrica abre el panel para
+  [enviarle un comando](#envío-de-comandos). Las que el nodo declara de solo
+  lectura llevan un candado y no se pueden elegir.
 
 ### Estado de nodos y devices
 
@@ -240,6 +249,49 @@ completo se ve en el detalle.
 
 Si un mensaje DATA no trae el tipo de dato, se usa el declarado en el BIRTH.
 
+## Envío de comandos
+
+En el árbol, un clic sobre una métrica abre a la derecha el panel **Enviar
+comando**, con el destino, el tipo de dato, el valor actual y un campo para
+escribir el valor nuevo. Al enviarlo la app publica un `NCMD` (métricas del
+nodo) o un `DCMD` (métricas de un device) con esa única métrica, QoS 0 y sin
+retener.
+
+- El árbol no cambia al enviar: muestra el valor nuevo cuando el nodo lo publica
+  en un DATA. El comando queda en la pantalla de eventos, en la píldora
+  **ENVIADOS**.
+- La métrica viaja con su nombre, con su alias si el BIRTH le declaró uno, y con
+  el tipo de dato que se ve en el árbol.
+- Para escribir un miembro de un UDT se envía el UDT con ese único miembro.
+- La conexión tiene que estar activa. Si el nodo o el device está offline el
+  panel lo avisa, pero deja enviar.
+
+**Qué métricas se pueden escribir.** Sparkplug no define cómo declarar que una
+métrica es de solo lectura, así que se puede elegir cualquiera salvo:
+
+- Las que el nodo marca con la propiedad `readOnly` en `true` (como hace
+  Ignition) o `writable` en `false`. Se muestran con un candado.
+- Las de tipo DataSet, Bytes, File o desconocido, y los UDT completos (sí sus
+  miembros).
+- Las definiciones de UDT, los parámetros de un UDT, el `bdSeq` y las métricas
+  con el alias sin resolver.
+
+Que el comando tenga efecto depende del nodo.
+
+**Cómo se escribe el valor.**
+
+| Tipo                         | Qué se escribe                                                                                                                                                                                                                                              |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Int8 … Int64, UInt8 … UInt64 | Número entero dentro del rango del tipo.                                                                                                                                                                                                                    |
+| Float, Double                | Número con punto decimal (`12.5`, `1e-3`), `NaN`, `Infinity` o `-Infinity`.                                                                                                                                                                                 |
+| Boolean                      | Un interruptor: `true` o `false`.                                                                                                                                                                                                                           |
+| String, Text, UUID           | El texto tal cual.                                                                                                                                                                                                                                          |
+| DateTime                     | Fecha y hora local (`2026-10-05 08:15:30.250`) o los milisegundos desde 1970.                                                                                                                                                                               |
+| Arrays                       | Los valores separados por coma, espacio o salto de línea, con o sin corchetes: `1.5, NaN, -Infinity, 42`. En un StringArray va un texto por línea; en un DateTimeArray, una fecha por línea o separadas por coma. Sin nada escrito se envía un array vacío. |
+
+El panel indica cuántos elementos tiene el array que se va a enviar y, si algo
+no sirve, cuál es el primer elemento con problemas.
+
 ## Actualizaciones
 
 La app instalada busca versiones nuevas en los
@@ -268,8 +320,8 @@ sobre una instalación existente, la reemplaza y conserva las conexiones.
 
 ## Limitaciones
 
-- Como mucho publica su `STATE` y los `NCMD` de rebirth: no se pueden escribir
-  métricas ni enviar otros comandos.
+- Cada comando escribe una sola métrica. No se pueden enviar DataSets, bytes ni
+  un UDT completo, ni marcar un valor como nulo.
 - Los eventos viven en memoria: se pierden al cerrar la app y no se exportan.
 - Los nombres de métrica con `/` no se abren en carpetas.
 - MQTT 3.1.1 sobre TCP o TLS. No hay WebSocket ni certificados de cliente.
@@ -353,13 +405,13 @@ git push <remoto> v1.2.3
 
 ### Estructura
 
-| Carpeta              | Contenido                                                                                                   |
-| -------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `src/shared`         | Tipos, parseo de tópicos, modelo de datos y combinación de UDT. Lo usan el proceso principal y el renderer. |
-| `src/main`           | Proceso principal: ventana, guardado de conexiones y actualizaciones.                                       |
-| `src/main/sparkplug` | Sesión MQTT (host, alias, secuencia, rebirth), decodificador de payloads y reparto de eventos a la ventana. |
-| `src/preload`        | API que el renderer usa para hablar con el proceso principal.                                               |
-| `src/renderer`       | Interfaz en React: conexiones, eventos y árbol de datos.                                                    |
+| Carpeta              | Contenido                                                                                                                                            |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/shared`         | Tipos, parseo de tópicos, modelo de datos, combinación de UDT y validación de los valores de un comando. Lo usan el proceso principal y el renderer. |
+| `src/main`           | Proceso principal: ventana, guardado de conexiones y actualizaciones.                                                                                |
+| `src/main/sparkplug` | Sesión MQTT (host, alias, secuencia, rebirth, comandos), codificación de payloads y reparto de eventos a la ventana.                                 |
+| `src/preload`        | API que el renderer usa para hablar con el proceso principal.                                                                                        |
+| `src/renderer`       | Interfaz en React: conexiones, eventos y árbol de datos.                                                                                             |
 
 El modelo de datos se arma aplicando los mismos eventos en los dos procesos: el
 principal lo necesita para resolver alias y el renderer para dibujar el árbol.

@@ -21,7 +21,10 @@ export interface ConnectionConfig {
   sparkplugAware: boolean
   /** Client ID de MQTT; tambien se usa como Host Application ID de Sparkplug */
   clientId: string
-  /** Publicar el STATE de host. Sin esto la app no deja nada propio en el broker salvo los rebirth */
+  /**
+   * Publicar el STATE de host. Sin esto la app no deja nada propio en el broker
+   * salvo los rebirth y los comandos que mande el usuario
+   */
   announceHost: boolean
   topic: string
   username: string
@@ -109,6 +112,20 @@ export interface SpEvent {
 
 export type NewEvent = Omit<SpEvent, 'id'>
 
+/** Escritura de una metrica: se publica como NCMD o, si lleva device, como DCMD */
+export interface MetricCommand {
+  connectionId: string
+  group: string
+  node: string
+  device?: string
+  /** Nombre de la metrica */
+  metric: string
+  /** Camino hasta el miembro que se escribe, cuando la metrica es un UDT */
+  path?: string[]
+  type: string
+  value: SpValue
+}
+
 export interface SerializedMetric {
   name: string
   alias?: string
@@ -186,6 +203,8 @@ export interface SpbApi {
   connect(id: string): Promise<void>
   disconnect(id: string): Promise<void>
   requestRebirth(connectionId: string, group: string, node: string): Promise<void>
+  /** Publica el comando; devuelve el motivo si no se pudo enviar */
+  sendCommand(command: MetricCommand): Promise<string | null>
   clearEvents(): Promise<void>
   getSnapshot(): Promise<Snapshot>
   onBatch(callback: (events: SpEvent[]) => void): () => void

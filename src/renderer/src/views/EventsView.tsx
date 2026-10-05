@@ -15,7 +15,7 @@ import type { ConnectionConfig, EventKind, SpEvent, SpMetric } from '@shared/typ
 import { ConnectionChip, TypeBadge } from '../components/badges'
 import { ConnectionFilter } from '../components/ConnectionFilter'
 import { VirtualList } from '../components/VirtualList'
-import { engUnit, formatDateTime, formatTime, formatValue } from '../format'
+import { engUnit, formatDateTime, formatJson, formatTime, formatValue } from '../format'
 import { store, useStoreVersion } from '../store'
 
 const ROW_HEIGHT = 26
@@ -34,7 +34,7 @@ const FILTER_GROUPS: { id: string; label: string; title: string }[] = [
   {
     id: 'sent',
     label: 'ENVIADOS',
-    title: 'Lo que publica esta app: su STATE y los NCMD de rebirth'
+    title: 'Lo que publica esta app: su STATE, los NCMD de rebirth y los comandos de escritura'
   }
 ]
 
@@ -329,7 +329,7 @@ function EventRow({
 
 function DetailValue({ metric }: { metric: SpMetric }): React.JSX.Element {
   if (metric.value !== null && typeof metric.value === 'object') {
-    return <pre className="detail-json">{JSON.stringify(metric.value, null, 2)}</pre>
+    return <pre className="detail-json">{formatJson(metric.value)}</pre>
   }
   const unit = engUnit(metric.properties)
   return (

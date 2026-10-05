@@ -1,3 +1,4 @@
+import { isReadOnly, isWritableType } from '@shared/command'
 import type { ConnectionModel, DeviceState, MetricState, NodeState } from '@shared/model'
 import { asTemplate, type TemplateValue } from '@shared/template'
 import type { ConnectionConfig, SpProperty, SpValue } from '@shared/types'
@@ -20,6 +21,8 @@ export interface TreeItem {
   nodeLevel?: boolean
   /** Nodo o device del que depende que el dato este vivo */
   owner?: DeviceState
+  /** En las filas de metrica, el nodo al que hay que mandarle los comandos */
+  edgeNode?: NodeState
   /** Metrica de la fila; en las filas de un UDT, la metrica que lo contiene */
   metric?: MetricState
   /** Camino de nombres hasta el miembro, dentro del UDT de la metrica */
@@ -84,11 +87,12 @@ class Builder {
     return item
   }
 
-  metrics(parent: TreeItem, owner: DeviceState): void {
+  metrics(parent: TreeItem, owner: DeviceState, edgeNode: NodeState): void {
     for (const metric of owner.metrics.values()) {
       const item = this.child(parent, 'metric', metric.name)
       item.metric = metric
       item.owner = owner
+      item.edgeNode = edgeNode
       const template = asTemplate(metric.type, metric.value)
       if (template) this.template(item, template, [])
     }
@@ -104,6 +108,7 @@ class Builder {
       const child = this.child(item, 'metric', name, id)
       child.metric = item.metric
       child.owner = item.owner
+      child.edgeNode = item.edgeNode
       child.path = [...path, name]
       return child
     }
@@ -157,6 +162,21 @@ export function leafOf(item: TreeItem): Leaf | undefined {
   return undefined
 }
 
+/**
+ * La fila es una metrica, o un miembro de un UDT, a la que se le puede mandar un
+ * comando para cambiarle el valor: tiene un tipo que se puede escribir y el nodo
+ * no la declara de solo lectura.
+ */
+export function isWritable(item: TreeItem, leaf: Leaf | undefined): boolean {
+  const { metric, edgeNode } = item
+  if (item.kind !== 'metric' || item.parameter || !metric || !edgeNode || !leaf) return false
+  if (metric.unresolved || !isWritableType(leaf.type)) return false
+  if (isReadOnly(leaf.properties) || isReadOnly(metric.properties)) return false
+  // el bdSeq es de la sesion del nodo, y una definicion de UDT no tiene valores que cambiar
+  if (item.owner === edgeNode && metric.name === 'bdSeq') return false
+  return !asTemplate(metric.type, metric.value)?.isDefinition
+}
+
 function isMetricRow(item: TreeItem): boolean {
   return item.kind === 'metric' || item.kind === 'template'
 }
@@ -199,13 +219,13 @@ export function buildTree(
       const own = builder.child(nodeItem, 'device', '-', '\u0002node')
       own.nodeLevel = true
       own.owner = node
-      builder.metrics(own, node)
+      builder.metrics(own, node, node)
 
       for (const device of node.devices.values()) {
         const deviceItem = builder.path(nodeItem, 'device', device.id)
         deviceItem.device = device
         deviceItem.owner = device
-        builder.metrics(deviceItem, device)
+        builder.metrics(deviceItem, device, node)
       }
     }
     finish(root)

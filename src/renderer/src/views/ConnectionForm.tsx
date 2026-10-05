@@ -8,6 +8,7 @@ import {
   type ConnectionErrors
 } from '@shared/connection'
 import { DEFAULT_TOPIC, type ConnectionConfig, type RebirthPolicy } from '@shared/types'
+import { Field } from '../components/Field'
 import { Toggle } from '../components/Toggle'
 
 interface ConnectionFormProps {
@@ -22,27 +23,6 @@ const REBIRTH_OPTIONS: { value: RebirthPolicy; label: string }[] = [
   { value: 'alias', label: 'Solo si llegan alias que no se pueden resolver' },
   { value: 'never', label: 'Nunca' }
 ]
-
-function Field({
-  label,
-  hint,
-  error,
-  children
-}: {
-  label: string
-  hint?: string
-  error?: string
-  children: React.ReactNode
-}): React.JSX.Element {
-  return (
-    <label className={`field${error ? ' has-error' : ''}`}>
-      <span className="field-label">{label}</span>
-      {children}
-      {error ? <span className="field-error">{error}</span> : null}
-      {!error && hint ? <span className="field-hint">{hint}</span> : null}
-    </label>
-  )
-}
 
 export function ConnectionForm({
   initial,
@@ -195,7 +175,7 @@ export function ConnectionForm({
             checked={draft.announceHost}
             onChange={(checked) => set('announceHost', checked)}
             label="Anunciarse como host"
-            hint="Publica el STATE de la app en spBv1.0/STATE/… como pide la norma. Desactivado, y con el rebirth en Nunca, la app solo escucha y no publica nada en el broker"
+            hint="Publica el STATE de la app en spBv1.0/STATE/… como pide la norma. Desactivado, y con el rebirth en Nunca, la app solo escucha y no publica nada en el broker por su cuenta"
           />
 
           <Field label="Tópico a escuchar" error={errors.topic}>

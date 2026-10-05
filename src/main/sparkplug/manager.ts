@@ -1,7 +1,14 @@
 import { BrowserWindow, ipcMain } from 'electron'
 import { normalizeConnection, validateConnection } from '@shared/connection'
 import { applyEvent, serializeModel } from '@shared/model'
-import type { ConnectionConfig, ConnectionStatus, NewEvent, Snapshot, SpEvent } from '@shared/types'
+import type {
+  ConnectionConfig,
+  ConnectionStatus,
+  MetricCommand,
+  NewEvent,
+  Snapshot,
+  SpEvent
+} from '@shared/types'
 import type { ConnectionStore } from '../store'
 import { SparkplugSession } from './session'
 
@@ -32,6 +39,10 @@ export class SparkplugManager {
     ipcMain.handle('sparkplug:rebirth', (_, id: string, group: string, node: string) =>
       this.sessions.get(id)?.requestRebirth(group, node)
     )
+    ipcMain.handle('sparkplug:command', (_, command: MetricCommand) => {
+      const session = this.sessions.get(command.connectionId)
+      return session ? session.sendCommand(command) : 'La conexión no está activa'
+    })
     ipcMain.handle('sparkplug:clear-events', () => {
       this.recent = []
     })

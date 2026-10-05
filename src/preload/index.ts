@@ -17,6 +17,7 @@ const api: SpbApi = {
   disconnect: (id) => ipcRenderer.invoke('connections:disconnect', id),
   requestRebirth: (connectionId, group, node) =>
     ipcRenderer.invoke('sparkplug:rebirth', connectionId, group, node),
+  sendCommand: (command) => ipcRenderer.invoke('sparkplug:command', command),
   clearEvents: () => ipcRenderer.invoke('sparkplug:clear-events'),
   getSnapshot: () => ipcRenderer.invoke('sparkplug:snapshot'),
   onBatch: (callback) => listen<SpEvent[]>('sparkplug:batch', callback),

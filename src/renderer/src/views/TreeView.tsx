@@ -4,17 +4,21 @@ import {
   ChevronRight,
   ChevronsDownUp,
   ChevronsUpDown,
+  Lock,
+  Pencil,
   RefreshCw,
   Search,
   TriangleAlert,
   X
 } from 'lucide-react'
+import { isReadOnly } from '@shared/command'
 import type { Liveness } from '@shared/types'
 import { ConnectionStatePill, KindIcon, LivenessPill } from '../components/badges'
 import { VirtualList } from '../components/VirtualList'
 import { engUnit, formatDateTime, formatTimestamp, formatValue, plural } from '../format'
 import { FLASH_MS, store, useStoreVersion } from '../store'
-import { buildTree, defaultOpen, flattenTree, leafOf, type TreeItem } from '../tree'
+import { buildTree, defaultOpen, flattenTree, isWritable, leafOf, type TreeItem } from '../tree'
+import { CommandPanel } from './CommandPanel'
 
 const ROW_HEIGHT = 28
 const INDENT = 18
@@ -38,20 +42,32 @@ function OfflineBadge({ count }: { count: number }): React.JSX.Element | null {
 function TreeRow({
   item,
   open,
-  onToggle
+  selected,
+  onToggle,
+  onSelect
 }: {
   item: TreeItem
   open: boolean
+  selected: boolean
   onToggle: () => void
+  onSelect: () => void
 }): React.JSX.Element {
   // metrica o miembro de UDT que muestra la fila, si es una fila de datos
   const metric = leafOf(item)
+  // las metricas que se pueden escribir se eligen con un clic para mandarles un comando
+  const writable = isWritable(item, metric)
+  const readOnly =
+    item.kind === 'metric' &&
+    !item.parameter &&
+    (isReadOnly(metric?.properties) || isReadOnly(item.metric?.properties))
   const now = store.now
   // estado del nodo o device del que depende la fila; las ramas intermedias no tienen
   const state = item.node ?? item.device
   const liveness: Liveness | undefined = (state ?? item.owner)?.status
   const classes = ['tree-row', `tree-${item.kind}`]
   if (liveness && liveness !== 'online') classes.push(`is-${liveness}`)
+  if (writable) classes.push('is-writable')
+  if (selected) classes.push('is-selected')
 
   let value: React.JSX.Element | null = null
   let type = ''
@@ -133,7 +149,7 @@ function TreeRow({
   const canRebirth = node && store.status(item.connection.id)?.state === 'connected'
 
   return (
-    <div className={classes.join(' ')}>
+    <div className={classes.join(' ')} onClick={writable ? onSelect : undefined}>
       <span className="cell tree-name" style={{ paddingLeft: 8 + item.depth * INDENT }}>
         {item.children.length ? (
           <button className="twisty" onClick={onToggle}>
@@ -159,6 +175,17 @@ function TreeRow({
             parámetro
           </span>
         ) : null}
+        {readOnly ? (
+          <span className="read-only" title="El nodo la declara de solo lectura">
+            <Lock size={11} />
+          </span>
+        ) : null}
+        {writable ? (
+          // el clic lo recibe la fila, igual que en el resto de su superficie
+          <button className="row-action" title="Enviar un comando para cambiarle el valor">
+            <Pencil size={12} /> Escribir
+          </button>
+        ) : null}
         {canRebirth ? (
           <button
             className="row-action"
@@ -183,6 +210,8 @@ export function TreeView({ active }: { active: boolean }): React.JSX.Element | n
   const [query, setQuery] = useState('')
   /** Solo lo que el usuario abrio o cerro a mano; el resto usa el estado por defecto */
   const [overrides, setOverrides] = useState<Map<string, boolean>>(new Map())
+  /** Fila elegida para mandarle un comando */
+  const [selectedKey, setSelectedKey] = useState<string | null>(null)
 
   const { connections, structure } = store
   const roots = useMemo(
@@ -195,8 +224,21 @@ export function TreeView({ active }: { active: boolean }): React.JSX.Element | n
     const isOpen = (item: TreeItem): boolean => overrides.get(item.key) ?? defaultOpen(item)
     return flattenTree(roots, isOpen, query)
   }, [roots, overrides, query])
+  // se busca por clave en cada pasada: el arbol se rearma cuando cambia su forma
+  const selected = useMemo(() => {
+    let found: TreeItem | undefined
+    if (selectedKey !== null) {
+      everyItem(roots, (item) => {
+        if (item.key === selectedKey) found = item
+      })
+    }
+    return found
+  }, [roots, selectedKey])
 
   if (!active) return null
+
+  const selectedLeaf = selected && leafOf(selected)
+  const target = selected && selectedLeaf && isWritable(selected, selectedLeaf) ? selected : null
 
   const searching = query.trim() !== ''
   const isOpen = (item: TreeItem): boolean =>
@@ -219,7 +261,10 @@ export function TreeView({ active }: { active: boolean }): React.JSX.Element | n
       <header className="view-header">
         <div>
           <h1>Árbol de datos</h1>
-          <p>Último valor de cada métrica, por conexión, grupo, nodo y device.</p>
+          <p>
+            Último valor de cada métrica, por conexión, grupo, nodo y device. Un clic en una métrica
+            permite enviarle un comando.
+          </p>
         </div>
         <div className="header-actions">
           <button className="button" onClick={() => setAll(true)} disabled={searching}>
@@ -268,37 +313,49 @@ export function TreeView({ active }: { active: boolean }): React.JSX.Element | n
         </div>
       </div>
 
-      <div className="table">
-        <div className="tree-row table-head">
-          <span className="cell">Nombre</span>
-          <span className="cell">Valor / estado</span>
-          <span className="cell">Tipo</span>
-          <span className="cell">Actualizado</span>
-        </div>
-        {connections.length && (hasData || rows.length) ? (
-          <VirtualList
-            className="table-body"
-            items={rows}
-            rowHeight={ROW_HEIGHT}
-            render={(item) => (
-              <TreeRow
-                key={item.key}
-                item={item}
-                open={isOpen(item)}
-                onToggle={() => toggle(item)}
-              />
-            )}
-          />
-        ) : (
-          <div className="empty">
-            <h2>{connections.length ? 'Sin datos todavía' : 'No hay conexiones'}</h2>
-            <p>
-              {connections.length
-                ? 'El árbol se arma con los BIRTH y DATA que llegan de las conexiones activas.'
-                : 'Agregá un broker desde Conexiones para empezar.'}
-            </p>
+      <div className={`tree-layout${target ? ' has-panel' : ''}`}>
+        <div className="table">
+          <div className="tree-row table-head">
+            <span className="cell">Nombre</span>
+            <span className="cell">Valor / estado</span>
+            <span className="cell">Tipo</span>
+            <span className="cell">Actualizado</span>
           </div>
-        )}
+          {connections.length && (hasData || rows.length) ? (
+            <VirtualList
+              className="table-body"
+              items={rows}
+              rowHeight={ROW_HEIGHT}
+              render={(item) => (
+                <TreeRow
+                  key={item.key}
+                  item={item}
+                  open={isOpen(item)}
+                  selected={item.key === target?.key}
+                  onToggle={() => toggle(item)}
+                  onSelect={() => setSelectedKey(item.key)}
+                />
+              )}
+            />
+          ) : (
+            <div className="empty">
+              <h2>{connections.length ? 'Sin datos todavía' : 'No hay conexiones'}</h2>
+              <p>
+                {connections.length
+                  ? 'El árbol se arma con los BIRTH y DATA que llegan de las conexiones activas.'
+                  : 'Agregá un broker desde Conexiones para empezar.'}
+              </p>
+            </div>
+          )}
+        </div>
+        {target && selectedLeaf ? (
+          <CommandPanel
+            key={target.key}
+            item={target}
+            leaf={selectedLeaf}
+            onClose={() => setSelectedKey(null)}
+          />
+        ) : null}
       </div>
     </section>
   )

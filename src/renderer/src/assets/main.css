@@ -74,7 +74,8 @@ ul {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
   color: inherit;
 }
@@ -1066,12 +1067,24 @@ select {
   background: var(--bg);
 }
 
+.field textarea {
+  min-height: 60px;
+  padding: 7px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  outline: 0;
+  background: var(--bg);
+  resize: vertical;
+}
+
 .field input:focus,
-.field select:focus {
+.field select:focus,
+.field textarea:focus {
   border-color: var(--accent);
 }
 
-.field.has-error input {
+.field.has-error input,
+.field.has-error textarea {
   border-color: var(--red);
 }
 
@@ -1282,7 +1295,8 @@ select {
 
 /* ---------- eventos ---------- */
 
-.events-layout {
+.events-layout,
+.tree-layout {
   display: flex;
   flex: 1;
   gap: 12px;
@@ -1740,6 +1754,51 @@ select {
 
 .tree-row.is-stale:is(.tree-metric, .tree-template) .tree-label {
   color: var(--muted);
+}
+
+/* metrica que se puede escribir: se elige con un clic y abre el panel de comandos */
+.tree-row.is-writable {
+  cursor: pointer;
+}
+
+.tree-row.is-selected,
+.table-body .tree-row.is-selected:hover {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.read-only {
+  display: inline-flex;
+  flex: none;
+  color: var(--muted);
+}
+
+/* con el panel abierto las columnas se angostan para que sigan entrando las cuatro */
+.tree-layout.has-panel {
+  --tree-cols: minmax(220px, 2.2fr) minmax(150px, 1.6fr) 104px 116px;
+}
+
+.detail .field :is(input, textarea) {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.command-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.command-sent {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: color-mix(in srgb, var(--green) 75%, white);
+  font-size: 12px;
+}
+
+.command-sent svg {
+  flex: none;
+  margin-top: 2px;
 }
 
 @keyframes fresh {

@@ -1,7 +1,7 @@
-import type Long from 'long'
+import Long from 'long'
 import { org } from 'sparkplug-payload/lib/sparkplugPayloadProto'
-import { asTemplate } from '@shared/template'
-import type { SpProperty, SpValue } from '@shared/types'
+import { asTemplate, type TemplateMember } from '@shared/template'
+import type { MetricCommand, SpProperty, SpValue } from '@shared/types'
 
 // Se decodifica directo sobre el protobuf generado: el decodificador de alto
 // nivel de sparkplug-payload falla con DataSets de enteros y no conoce los
@@ -57,6 +57,7 @@ const INT16 = 2
 const INT32 = 3
 const INT64 = 4
 const BOOLEAN = 11
+const TEMPLATE = 19
 const FIRST_ARRAY = 22
 const BYTES_PREVIEW = 64
 
@@ -319,4 +320,126 @@ export function encodeRebirth(now: number): Buffer {
     ]
   }).finish()
   return Buffer.from(payload)
+}
+
+/** uint64 del protobuf para un entero de 64 bits; los negativos van en complemento a dos */
+function toLong(value: SpValue): Long {
+  const bits = BigInt.asUintN(64, BigInt(value as number | string))
+  return Long.fromString(bits.toString(), true)
+}
+
+/** Inversa de decodeArray: los valores empaquetados como viajan en bytes_value */
+function encodeArray(values: SpValue[], type: string): Buffer {
+  const each = (
+    size: number,
+    write: (buf: Buffer, value: SpValue, offset: number) => void
+  ): Buffer => {
+    const buf = Buffer.alloc(values.length * size)
+    values.forEach((value, i) => write(buf, value, i * size))
+    return buf
+  }
+  switch (type) {
+    case 'Int8Array':
+      return each(1, (buf, value, o) => buf.writeInt8(Number(value), o))
+    case 'Int16Array':
+      return each(2, (buf, value, o) => buf.writeInt16LE(Number(value), o))
+    case 'Int32Array':
+      return each(4, (buf, value, o) => buf.writeInt32LE(Number(value), o))
+    case 'UInt8Array':
+      return each(1, (buf, value, o) => buf.writeUInt8(Number(value), o))
+    case 'UInt16Array':
+      return each(2, (buf, value, o) => buf.writeUInt16LE(Number(value), o))
+    case 'UInt32Array':
+      return each(4, (buf, value, o) => buf.writeUInt32LE(Number(value), o))
+    case 'Int64Array':
+    case 'UInt64Array':
+    case 'DateTimeArray':
+      return each(8, (buf, value, o) =>
+        buf.writeBigUInt64LE(BigInt.asUintN(64, BigInt(value as number | string)), o)
+      )
+    case 'FloatArray':
+      return each(4, (buf, value, o) => buf.writeFloatLE(Number(value), o))
+    case 'DoubleArray':
+      return each(8, (buf, value, o) => buf.writeDoubleLE(Number(value), o))
+    case 'BooleanArray': {
+      const buf = Buffer.alloc(4 + Math.ceil(values.length / 8))
+      buf.writeUInt32LE(values.length, 0)
+      values.forEach((value, i) => {
+        if (value === true) buf[4 + (i >> 3)] |= 0x80 >> (i & 7)
+      })
+      return buf
+    }
+    default:
+      // StringArray
+      return Buffer.concat(values.map((value) => Buffer.from(`${String(value)}\0`, 'utf8')))
+  }
+}
+
+/** Campos de la metrica que llevan el valor. El valor ya tiene que estar validado para su tipo */
+function encodeValue(type: string, value: SpValue): PMetric {
+  const datatype = typeCode(type)
+  if (Array.isArray(value)) return { datatype, bytesValue: encodeArray(value, type) }
+  switch (type) {
+    case 'Int8':
+    case 'Int16':
+    case 'Int32':
+    case 'UInt8':
+    case 'UInt16':
+    case 'UInt32':
+      return { datatype, intValue: Number(value) >>> 0 }
+    case 'Int64':
+    case 'UInt64':
+    case 'DateTime':
+      return { datatype, longValue: toLong(value) }
+    case 'Float':
+      return { datatype, floatValue: Number(value) }
+    case 'Double':
+      return { datatype, doubleValue: Number(value) }
+    case 'Boolean':
+      return { datatype, booleanValue: value === true }
+    default:
+      return { datatype, stringValue: String(value) }
+  }
+}
+
+type CommandTarget = Pick<TemplateMember, 'name' | 'alias' | 'type' | 'value'>
+
+/**
+ * Metrica de un comando. Para escribir un miembro de un UDT se manda el UDT con
+ * ese unico miembro, igual que en un DATA parcial. null si el camino ya no existe.
+ */
+function commandMetric(
+  target: CommandTarget,
+  path: string[],
+  command: MetricCommand,
+  now: number
+): PMetric | null {
+  // van el nombre y el alias: hay nodos que buscan la metrica por uno y nodos que por el otro
+  const metric: PMetric = { name: target.name, timestamp: now }
+  if (target.alias !== undefined) metric.alias = Long.fromString(target.alias, true)
+  if (!path.length) return { ...metric, ...encodeValue(command.type, command.value) }
+
+  const template = asTemplate(target.type, target.value)
+  const member = template?.metrics.find((known) => known.name === path[0])
+  const inner = member && commandMetric(member, path.slice(1), command, now)
+  if (!template || !inner) return null
+  return {
+    ...metric,
+    datatype: TEMPLATE,
+    templateValue: {
+      templateRef: template.templateRef,
+      version: template.version,
+      isDefinition: false,
+      metrics: [inner]
+    }
+  }
+}
+
+export function encodeCommand(
+  now: number,
+  target: CommandTarget,
+  command: MetricCommand
+): Buffer | null {
+  const metric = commandMetric(target, command.path ?? [], command, now)
+  return metric && Buffer.from(Payload.encode({ timestamp: now, metrics: [metric] }).finish())
 }
