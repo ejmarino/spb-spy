@@ -29,21 +29,24 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Historial completo con los tags: la versión se calcula a partir de ellos
+          fetch-depth: 0
 
       - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
 
-      - name: Verificar que el tag coincide con la versión de package.json
+      - run: npm ci
+
+      - name: Verificar que la versión calculada coincide con el tag
         run: |
-          version="v$(node -p "require('./package.json').version")"
+          version="v$(npx --no-install absolute-version-from-git-tag)"
           if [ "$version" != "$GITHUB_REF_NAME" ]; then
-            echo "::error::El tag $GITHUB_REF_NAME no coincide con la versión de package.json ($version)"
+            echo "::error::La versión calculada ($version) no coincide con el tag $GITHUB_REF_NAME"
             exit 1
           fi
-
-      - run: npm ci
 
       # --publish never: electron-builder no sube nada, el release lo arma el job de abajo
       - run: npm run ${{ matrix.script }} -- --publish never

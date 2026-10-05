@@ -11,14 +11,17 @@ stages:
   image: electronuserland/builder:24-wine
   rules:
     - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+/
+  variables:
+    # Historial completo con los tags: la versión se calcula a partir de ellos
+    GIT_DEPTH: 0
   before_script:
+    - npm ci
     - |
-      version="v$(node -p "require('./package.json').version")"
+      version="v$(npx --no-install absolute-version-from-git-tag)"
       if [ "$version" != "$CI_COMMIT_TAG" ]; then
-        echo "El tag $CI_COMMIT_TAG no coincide con la versión de package.json ($version)"
+        echo "La versión calculada ($version) no coincide con el tag $CI_COMMIT_TAG"
         exit 1
       fi
-    - npm ci
 
 build:linux:
   extends: .build

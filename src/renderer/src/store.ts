@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { applyEvent, createModel, deserializeModel, type ConnectionModel } from '@shared/model'
-import type { ConnectionConfig, ConnectionStatus, SpEvent } from '@shared/types'
+import type { ConnectionConfig, ConnectionStatus, SpEvent, UpdateStatus } from '@shared/types'
 
 const MAX_EVENTS = 5_000
 /** Tiempo que dura el resaltado de un valor recien actualizado */
@@ -13,6 +13,8 @@ export const FLASH_MS = 1_200
  */
 class Store {
   connections: ConnectionConfig[] = []
+  /** En que anda la busqueda de actualizaciones */
+  update: UpdateStatus = { state: 'unsupported', autoCheck: true }
   events: SpEvent[] = []
   /** Sube con cada lote de eventos o cambio de estado */
   version = 0
@@ -48,6 +50,12 @@ class Store {
       this.statuses.set(status.id, status)
       this.notify()
     })
+    const setUpdate = (status: UpdateStatus): void => {
+      this.update = status
+      this.notify()
+    }
+    window.api.onUpdateStatus(setUpdate)
+    window.api.getUpdateStatus().then(setUpdate)
     window.api.getSnapshot().then((snapshot) => {
       this.connections = snapshot.connections
       for (const status of snapshot.statuses) this.statuses.set(status.id, status)
@@ -79,6 +87,11 @@ class Store {
 
   async deleteConnection(id: string): Promise<void> {
     this.setConnections(await window.api.deleteConnection(id))
+  }
+
+  async setAutoUpdateCheck(enabled: boolean): Promise<void> {
+    this.update = await window.api.setAutoUpdateCheck(enabled)
+    this.notify()
   }
 
   clearEvents(): void {

@@ -8,6 +8,7 @@ import {
   type ConnectionErrors
 } from '@shared/connection'
 import { DEFAULT_TOPIC, type ConnectionConfig, type RebirthPolicy } from '@shared/types'
+import { Toggle } from '../components/Toggle'
 
 interface ConnectionFormProps {
   initial: ConnectionConfig
@@ -39,29 +40,6 @@ function Field({
       {children}
       {error ? <span className="field-error">{error}</span> : null}
       {!error && hint ? <span className="field-hint">{hint}</span> : null}
-    </label>
-  )
-}
-
-function Toggle({
-  checked,
-  onChange,
-  label,
-  hint
-}: {
-  checked: boolean
-  onChange: (checked: boolean) => void
-  label: string
-  hint?: string
-}): React.JSX.Element {
-  return (
-    <label className="toggle">
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
-      <span className="toggle-track" />
-      <span className="toggle-text">
-        {label}
-        {hint ? <span className="field-hint">{hint}</span> : null}
-      </span>
     </label>
   )
 }

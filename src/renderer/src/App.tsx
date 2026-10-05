@@ -1,7 +1,9 @@
 import { useState } from 'react'
-import { Cable, ListTree, Play, Radar, ScrollText, Square } from 'lucide-react'
+import { Cable, Download, Info, ListTree, Play, Radar, ScrollText, Square } from 'lucide-react'
 import { connectionLabel } from '@shared/connection'
+import type { UpdateStatus } from '@shared/types'
 import { store, useStoreVersion } from './store'
+import { About } from './views/About'
 import { ConnectionsView } from './views/ConnectionsView'
 import { EventsView } from './views/EventsView'
 import { TreeView } from './views/TreeView'
@@ -21,9 +23,19 @@ const STATE_TITLES = {
   reconnecting: 'Reintentando…'
 }
 
+/** Aviso del panel lateral cuando hay una version nueva para bajar o instalar */
+function updateNotice({ state, version, percent }: UpdateStatus): string | null {
+  if (state === 'available') return `Versión ${version} disponible`
+  if (state === 'downloading') return `Descargando ${version}… ${percent ?? 0} %`
+  if (state === 'downloaded') return `Versión ${version} lista para instalar`
+  return null
+}
+
 function App(): React.JSX.Element {
   useStoreVersion()
   const [view, setView] = useState<View>('connections')
+  const [aboutOpen, setAboutOpen] = useState(false)
+  const notice = updateNotice(store.update)
 
   return (
     <div className="app">
@@ -72,6 +84,19 @@ function App(): React.JSX.Element {
           })}
           {store.connections.length ? null : <li className="sidebar-empty">Ninguna todavía</li>}
         </ul>
+
+        <div className="sidebar-footer">
+          {notice ? (
+            <button className="sidebar-update" onClick={() => setAboutOpen(true)}>
+              <Download size={14} />
+              {notice}
+            </button>
+          ) : null}
+          <button className="nav-item" onClick={() => setAboutOpen(true)}>
+            <Info size={16} />
+            Acerca de
+          </button>
+        </div>
       </aside>
 
       <main className="main">
@@ -79,6 +104,8 @@ function App(): React.JSX.Element {
         <EventsView active={view === 'events'} />
         <TreeView active={view === 'tree'} />
       </main>
+
+      {aboutOpen ? <About onClose={() => setAboutOpen(false)} /> : null}
     </div>
   )
 }

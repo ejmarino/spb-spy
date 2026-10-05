@@ -4,6 +4,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { SparkplugManager } from './sparkplug/manager'
 import { ConnectionStore } from './store'
+import { Updater } from './updater'
 
 const WINDOW_WIDTH = 1360
 const WINDOW_HEIGHT = 820
@@ -69,6 +70,7 @@ app.whenReady().then(() => {
 
   manager = new SparkplugManager(new ConnectionStore())
   manager.registerIpc()
+  new Updater().start()
 
   createWindow()
 

@@ -20,6 +20,7 @@ Es una app de escritorio hecha con Electron, React y TypeScript.
 - [Árbol de datos](#árbol-de-datos)
 - [UDT (templates)](#udt-templates)
 - [Tipos de datos](#tipos-de-datos)
+- [Actualizaciones](#actualizaciones)
 - [Limitaciones](#limitaciones)
 - [Desarrollo](#desarrollo)
 
@@ -239,6 +240,32 @@ completo se ve en el detalle.
 
 Si un mensaje DATA no trae el tipo de dato, se usa el declarado en el BIRTH.
 
+## Actualizaciones
+
+La app instalada busca versiones nuevas en los
+[releases de GitHub](https://github.com/ejmarino/spb-spy/releases). Los controles
+están en "Acerca de", al pie del panel lateral:
+
+- **Buscar actualizaciones automáticamente**: una vez por día, empezando poco
+  después de abrir la app. Viene activado.
+- **Buscar actualizaciones**: hace la búsqueda en el momento.
+
+Cuando hay una versión más nueva que la instalada, la app avisa en el panel
+lateral y en "Acerca de" ofrece descargarla e instalarla. Nada se descarga sin
+pedirlo; una vez descargada, se instala al reiniciar la app.
+
+- En Windows actualiza la instalación hecha con el instalador `.exe`.
+- En Linux actualiza el AppImage (reemplaza el archivo) o el paquete `.deb`
+  (pide la contraseña de administrador).
+- Solo se actualizan las versiones publicadas de la app instalada: en modo
+  desarrollo y en las versiones intermedias la búsqueda queda deshabilitada.
+
+La preferencia se guarda en `settings.json`, en la misma carpeta que las
+conexiones.
+
+También se puede actualizar a mano: el instalador de una versión nueva, corrido
+sobre una instalación existente, la reemplaza y conserva las conexiones.
+
 ## Limitaciones
 
 - Como mucho publica su `STATE` y los `NCMD` de rebirth: no se pueden escribir
@@ -293,20 +320,35 @@ El instalador de Windows instala por usuario, sin pedir permisos de
 administrador. No está firmado, así que SmartScreen muestra una advertencia al
 ejecutarlo.
 
-### Releases
+### Versionado y releases
 
-Al subir un tag de versión (`v1.2.3`) se empaquetan Linux y Windows en CI:
+La versión de la app no se mantiene a mano: se calcula con
+[absolute-version](https://www.npmjs.com/package/absolute-version) a partir de
+los tags de git con forma `vX.Y.Z`. La de `package.json` es solo un relleno.
+
+- Parado en un commit con el tag `v1.2.3`, la versión es `1.2.3`.
+- Entre tags suma la rama, la distancia al último tag y el hash del commit, por
+  ejemplo `1.2.3-main+4.6fe275b`. Con cambios sin commitear agrega `SNAPSHOT` y
+  el nombre del equipo.
+
+Esa versión queda fija en el código al compilar (se ve en "Acerca de") y es la
+que llevan los paquetes. Para ver la que corresponde al commit actual:
+
+```bash
+npx absolute-version-from-git-tag
+```
+
+Al subir un tag de versión se empaquetan Linux y Windows en CI:
 
 - En GitHub (`.github/workflows/release.yml`) se crea el release del tag con los
   paquetes como assets.
 - En GitLab (`.gitlab-ci.yml`) los paquetes quedan como artifacts del pipeline.
 
-El tag tiene que coincidir con la versión de `package.json`; si no, el build
-falla.
+Para sacar un release alcanza con crear el tag y subirlo:
 
 ```bash
-npm version 1.2.3   # actualiza package.json y crea el commit y el tag v1.2.3
-git push <remoto> main v1.2.3
+git tag -a v1.2.3 -m "v1.2.3"
+git push <remoto> v1.2.3
 ```
 
 ### Estructura
@@ -314,7 +356,7 @@ git push <remoto> main v1.2.3
 | Carpeta              | Contenido                                                                                                   |
 | -------------------- | ----------------------------------------------------------------------------------------------------------- |
 | `src/shared`         | Tipos, parseo de tópicos, modelo de datos y combinación de UDT. Lo usan el proceso principal y el renderer. |
-| `src/main`           | Proceso principal: ventana y guardado de conexiones.                                                        |
+| `src/main`           | Proceso principal: ventana, guardado de conexiones y actualizaciones.                                       |
 | `src/main/sparkplug` | Sesión MQTT (host, alias, secuencia, rebirth), decodificador de payloads y reparto de eventos a la ventana. |
 | `src/preload`        | API que el renderer usa para hablar con el proceso principal.                                               |
 | `src/renderer`       | Interfaz en React: conexiones, eventos y árbol de datos.                                                    |

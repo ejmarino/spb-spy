@@ -149,6 +149,36 @@ export interface Snapshot {
   lastEventId: number
 }
 
+/**
+ * En que anda la busqueda de actualizaciones:
+ * - unsupported: esta copia de la app no se actualiza sola (desarrollo o version intermedia)
+ * - idle: todavia no se busco
+ * - up-to-date: no hay nada mas nuevo que lo instalado
+ * - available: hay una version nueva para descargar
+ * - downloaded: la version nueva ya se bajo y se instala al reiniciar
+ */
+export type UpdateState =
+  | 'unsupported'
+  | 'idle'
+  | 'checking'
+  | 'up-to-date'
+  | 'available'
+  | 'downloading'
+  | 'downloaded'
+  | 'error'
+
+export interface UpdateStatus {
+  state: UpdateState
+  /** Buscar actualizaciones automaticamente una vez por dia */
+  autoCheck: boolean
+  /** Version nueva, cuando hay una */
+  version?: string
+  /** Avance de la descarga, de 0 a 100 */
+  percent?: number
+  /** Motivo del error */
+  error?: string
+}
+
 export interface SpbApi {
   listConnections(): Promise<ConnectionConfig[]>
   saveConnection(config: ConnectionConfig): Promise<ConnectionConfig[]>
@@ -160,4 +190,10 @@ export interface SpbApi {
   getSnapshot(): Promise<Snapshot>
   onBatch(callback: (events: SpEvent[]) => void): () => void
   onStatus(callback: (status: ConnectionStatus) => void): () => void
+  getUpdateStatus(): Promise<UpdateStatus>
+  setAutoUpdateCheck(enabled: boolean): Promise<UpdateStatus>
+  checkForUpdates(): Promise<void>
+  downloadUpdate(): Promise<void>
+  installUpdate(): Promise<void>
+  onUpdateStatus(callback: (status: UpdateStatus) => void): () => void
 }
