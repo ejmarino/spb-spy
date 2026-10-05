@@ -34,7 +34,7 @@ export function newConnection(existing: ConnectionConfig[]): ConnectionConfig {
     tls: false,
     rejectUnauthorized: true,
     sparkplugAware: false,
-    clientId: `spb-spy-${randomSuffix()}`,
+    clientId: `SpbSpy-${randomSuffix()}`,
     announceHost: true,
     topic: DEFAULT_TOPIC,
     username: '',

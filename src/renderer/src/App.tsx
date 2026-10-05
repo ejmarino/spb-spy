@@ -31,7 +31,7 @@ function App(): React.JSX.Element {
         <div className="brand">
           <Radar size={20} />
           <div>
-            <strong>spb-spy</strong>
+            <strong>SpbSpy</strong>
             <span>Visor Sparkplug B</span>
           </div>
         </div>

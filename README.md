@@ -1,4 +1,4 @@
-# spb-spy
+# SpbSpy
 
 Visor de tráfico **Sparkplug B** sobre MQTT. Se conecta a uno o varios brokers, se
 anuncia como Host Application, decodifica lo que publican los edge nodes y lo
@@ -64,7 +64,7 @@ una conexión que está en uso la reconecta con la configuración nueva y descar
 los datos que tenía en el árbol.
 
 Las conexiones se guardan en `connections.json`, dentro de la carpeta de datos
-del usuario (`~/.config/spb-spy` en Linux, `%APPDATA%\spb-spy` en Windows). La
+del usuario (`~/.config/SpbSpy` en Linux, `%APPDATA%\SpbSpy` en Windows). La
 contraseña se guarda cifrada cuando el sistema ofrece un almacén de credenciales.
 
 ## Comportamiento como host Sparkplug

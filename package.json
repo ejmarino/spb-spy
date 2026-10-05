@@ -1,5 +1,6 @@
 {
   "name": "spb-spy",
+  "productName": "SpbSpy",
   "version": "1.0.0",
   "description": "Visor de tráfico Sparkplug B sobre MQTT",
   "main": "./out/main/index.js",
