@@ -14,3 +14,10 @@ RUN dpkg --add-architecture i386 \
         wine wine32:i386 wine64 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+# Claude Code y OpenSpec como herramientas globales del usuario node. Claude
+# Code baja su binario en un script de instalacion, que npm solo corre si se
+# lo permite de forma explicita.
+RUN su node -c "npm install -g --allow-scripts=@anthropic-ai/claude-code \
+        @anthropic-ai/claude-code @fission-ai/openspec \
+    && npm cache clean --force"
