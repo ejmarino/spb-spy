@@ -1212,22 +1212,43 @@ textarea {
   color: var(--accent);
 }
 
-.about-updates {
+/* ---------- configuracion ---------- */
+
+.modal-settings {
+  width: 480px;
+}
+
+.settings-section {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.settings-section + .settings-section {
   padding-top: 14px;
   border-top: 1px solid var(--border);
 }
 
-.about-update-row {
+.settings-section h3 {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.settings-section .field {
+  max-width: none;
+}
+
+.settings-update-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
 
-.about-update-message {
+.settings-update-message {
   color: var(--text-2);
   font-size: 12px;
 }

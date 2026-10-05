@@ -1,8 +1,14 @@
 import { useSyncExternalStore } from 'react'
 import { applyEvent, createModel, deserializeModel, type ConnectionModel } from '@shared/model'
-import type { ConnectionConfig, ConnectionStatus, SpEvent, UpdateStatus } from '@shared/types'
+import { DEFAULT_SETTINGS, trimEvents } from '@shared/settings'
+import type {
+  AppSettings,
+  ConnectionConfig,
+  ConnectionStatus,
+  SpEvent,
+  UpdateStatus
+} from '@shared/types'
 
-const MAX_EVENTS = 5_000
 /** Tiempo que dura el resaltado de un valor recien actualizado */
 export const FLASH_MS = 1_200
 
@@ -14,7 +20,8 @@ export const FLASH_MS = 1_200
 class Store {
   connections: ConnectionConfig[] = []
   /** En que anda la busqueda de actualizaciones */
-  update: UpdateStatus = { state: 'unsupported', autoCheck: true }
+  update: UpdateStatus = { state: 'unsupported' }
+  settings: AppSettings = DEFAULT_SETTINGS
   events: SpEvent[] = []
   /** Sube con cada lote de eventos o cambio de estado */
   version = 0
@@ -56,6 +63,14 @@ class Store {
     }
     window.api.onUpdateStatus(setUpdate)
     window.api.getUpdateStatus().then(setUpdate)
+    const setSettings = (settings: AppSettings): void => {
+      this.settings = settings
+      // si se achico el maximo, lo que sobra se descarta en el momento
+      this.events = trimEvents(this.events, settings.maxEvents, true)
+      this.notify()
+    }
+    window.api.onSettings(setSettings)
+    window.api.getSettings().then(setSettings)
     window.api.getSnapshot().then((snapshot) => {
       this.connections = snapshot.connections
       for (const status of snapshot.statuses) this.statuses.set(status.id, status)
@@ -89,9 +104,9 @@ class Store {
     this.setConnections(await window.api.deleteConnection(id))
   }
 
-  async setAutoUpdateCheck(enabled: boolean): Promise<void> {
-    this.update = await window.api.setAutoUpdateCheck(enabled)
-    this.notify()
+  /** El cambio vuelve por `onSettings`, que es quien lo aplica */
+  async setSettings(changes: Partial<AppSettings>): Promise<void> {
+    await window.api.setSettings(changes)
   }
 
   clearEvents(): void {
@@ -125,7 +140,7 @@ class Store {
       if (model.structure !== before) this.structure++
       this.events.push(event)
     }
-    if (this.events.length > MAX_EVENTS * 1.2) this.events = this.events.slice(-MAX_EVENTS)
+    this.events = trimEvents(this.events, this.settings.maxEvents)
     this.notify()
     // una pasada mas cuando vence el resaltado, por si no llegan mas eventos
     if (this.settleTimer) clearTimeout(this.settleTimer)

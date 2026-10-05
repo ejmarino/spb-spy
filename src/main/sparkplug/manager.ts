@@ -1,6 +1,7 @@
 import { BrowserWindow, ipcMain } from 'electron'
 import { normalizeConnection, validateConnection } from '@shared/connection'
 import { applyEvent, serializeModel } from '@shared/model'
+import { trimEvents } from '@shared/settings'
 import type {
   ConnectionConfig,
   ConnectionStatus,
@@ -9,10 +10,10 @@ import type {
   Snapshot,
   SpEvent
 } from '@shared/types'
+import type { SettingsStore } from '../settings'
 import type { ConnectionStore } from '../store'
 import { SparkplugSession } from './session'
 
-const MAX_EVENTS = 5_000
 /** Los eventos se mandan al renderer agrupados para no saturar el IPC */
 const FLUSH_MS = 100
 
@@ -26,8 +27,15 @@ export class SparkplugManager {
   private flushTimer: NodeJS.Timeout | null = null
   private lastEventId = 0
 
-  constructor(private readonly store: ConnectionStore) {
+  constructor(
+    private readonly store: ConnectionStore,
+    private readonly settings: SettingsStore
+  ) {
     this.configs = store.load()
+    // si se achica el maximo, lo que sobra se descarta en el momento
+    settings.onChange(({ maxEvents }) => {
+      this.recent = trimEvents(this.recent, maxEvents, true)
+    })
   }
 
   registerIpc(): void {
@@ -129,7 +137,7 @@ export class SparkplugManager {
     const session = this.sessions.get(full.connectionId)
     if (session) applyEvent(session.model, full)
     this.recent.push(full)
-    if (this.recent.length > MAX_EVENTS * 1.2) this.recent = this.recent.slice(-MAX_EVENTS)
+    this.recent = trimEvents(this.recent, this.settings.current.maxEvents)
     this.pending.push(full)
     this.flushTimer ??= setTimeout(() => {
       this.flushTimer = null

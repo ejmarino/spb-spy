@@ -21,6 +21,7 @@ Es una app de escritorio hecha con Electron, React y TypeScript.
 - [UDT (templates)](#udt-templates)
 - [Tipos de datos](#tipos-de-datos)
 - [Envío de comandos](#envío-de-comandos)
+- [Configuración](#configuración)
 - [Actualizaciones](#actualizaciones)
 - [Limitaciones](#limitaciones)
 - [Desarrollo](#desarrollo)
@@ -135,7 +136,8 @@ lleva el color de su conexión.
   `bdSeq`, tamaño y todas las métricas con tipo, alias y propiedades.
 - La lista sigue el final mientras llegan eventos. **Pausar**, o subir con el
   scroll, la congela; **Seguir en vivo** la reanuda e indica cuántos llegaron.
-- Se conservan los últimos 5000 eventos, en memoria.
+- Se conservan en memoria los últimos 10.000 eventos, sumando todas las
+  conexiones. El máximo se cambia en [Configuración](#configuración).
 
 ### Filtros
 
@@ -300,28 +302,43 @@ Que el comando tenga efecto depende del nodo.
 El panel indica cuántos elementos tiene el array que se va a enviar y, si algo
 no sirve, cuál es el primer elemento con problemas.
 
+## Configuración
+
+"Configuración", al pie del panel lateral, reúne las opciones de la app. Cada
+cambio se guarda y se aplica en el momento, sin reiniciar ni reconectar.
+
+- **Buscar actualizaciones**: cada cuánto se buscan solas. Ver
+  [Actualizaciones](#actualizaciones).
+- **Máximo de eventos en memoria**: cuántos eventos conserva la pantalla de
+  eventos, entre 500 y 50.000; por defecto, 10.000. Es un solo máximo para
+  todas las conexiones. El valor se aplica al salir del campo o con Enter. Al
+  bajarlo se descartan en el momento los eventos más viejos; el árbol de datos
+  no cambia. Más eventos ocupan más memoria, sobre todo si hay mensajes con
+  muchas métricas.
+
+Las opciones se guardan en `settings.json`, en la misma carpeta que las
+conexiones.
+
 ## Actualizaciones
 
 La app instalada busca versiones nuevas en los
 [releases de GitHub](https://github.com/ejmarino/spb-spy/releases). Los controles
-están en "Acerca de", al pie del panel lateral:
+están en [Configuración](#configuración):
 
-- **Buscar actualizaciones automáticamente**: una vez por día, empezando poco
-  después de abrir la app. Viene activado.
-- **Buscar actualizaciones**: hace la búsqueda en el momento.
+- **Buscar actualizaciones**: diaria, semanal, mensual (cada 30 días) o nunca.
+  El intervalo se cuenta desde la última búsqueda, manual o automática; si ya
+  se cumplió, la búsqueda se hace poco después de abrir la app. Viene en diaria.
+- **Buscar ahora**: hace la búsqueda en el momento, con cualquier periodicidad.
 
 Cuando hay una versión más nueva que la instalada, la app avisa en el panel
-lateral y en "Acerca de" ofrece descargarla e instalarla. Nada se descarga sin
-pedirlo; una vez descargada, se instala al reiniciar la app.
+lateral y en "Configuración" ofrece descargarla e instalarla. Nada se descarga
+sin pedirlo; una vez descargada, se instala al reiniciar la app.
 
 - En Windows actualiza la instalación hecha con el instalador `.exe`.
 - En Linux actualiza el AppImage (reemplaza el archivo) o el paquete `.deb`
   (pide la contraseña de administrador).
 - Solo se actualizan las versiones publicadas de la app instalada: en modo
   desarrollo y en las versiones intermedias la búsqueda queda deshabilitada.
-
-La preferencia se guarda en `settings.json`, en la misma carpeta que las
-conexiones.
 
 También se puede actualizar a mano: el instalador de una versión nueva, corrido
 sobre una instalación existente, la reemplaza y conserva las conexiones.
@@ -391,7 +408,7 @@ los tags de git con forma `vX.Y.Z`. La de `package.json` es solo un relleno.
   ejemplo `1.2.3-main+4.6fe275b`. Con cambios sin commitear agrega `SNAPSHOT` y
   el nombre del equipo.
 
-Esa versión queda fija en el código al compilar (se ve en "Acerca de") y es la
+Esa versión queda fija en el código al compilar (se ve en "Acerca de SpbSpy") y es la
 que llevan los paquetes. Para ver la que corresponde al commit actual:
 
 ```bash

@@ -1,23 +1,13 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
-import { existsSync, readFileSync, writeFileSync } from 'fs'
-import { join } from 'path'
 import { autoUpdater } from 'electron-updater'
+import { updateCheckDue } from '@shared/settings'
 import type { UpdateStatus } from '@shared/types'
+import type { SettingsStore } from './settings'
 
-const DAY_MS = 24 * 60 * 60 * 1000
-/** Cada cuanto se revisa si ya toca la busqueda diaria */
+/** Cada cuanto se revisa si ya toca la busqueda automatica */
 const TICK_MS = 60 * 60 * 1000
 /** Espera despues del arranque antes de la primera busqueda automatica */
 const STARTUP_DELAY_MS = 10_000
-
-interface Settings {
-  /** Buscar actualizaciones automaticamente una vez por dia */
-  autoUpdateCheck: boolean
-  /** Momento de la ultima busqueda, manual o automatica */
-  lastUpdateCheck: number
-}
-
-const DEFAULT_SETTINGS: Settings = { autoUpdateCheck: true, lastUpdateCheck: 0 }
 
 /**
  * Solo se actualiza la app instalada y en una version publicada: las versiones
@@ -32,18 +22,14 @@ function canUpdate(): boolean {
  * descarga y la instalacion se hacen recien cuando el usuario las pide.
  */
 export class Updater {
-  private readonly file = join(app.getPath('userData'), 'settings.json')
-  private readonly settings = this.load()
-  private status: UpdateStatus = {
-    state: canUpdate() ? 'idle' : 'unsupported',
-    autoCheck: this.settings.autoUpdateCheck
-  }
+  private status: UpdateStatus = { state: canUpdate() ? 'idle' : 'unsupported' }
   /** La busqueda en curso la pidio el usuario: si falla, se le muestra el error */
   private manual = false
 
+  constructor(private readonly settings: SettingsStore) {}
+
   start(): void {
     ipcMain.handle('updates:status', () => this.status)
-    ipcMain.handle('updates:set-auto-check', (_, enabled: boolean) => this.setAutoCheck(enabled))
     ipcMain.handle('updates:check', () => this.check(true))
     ipcMain.handle('updates:download', () => this.download())
     ipcMain.handle('updates:install', () => this.install())
@@ -71,25 +57,18 @@ export class Updater {
     setInterval(() => this.autoCheck(), TICK_MS)
   }
 
-  private setAutoCheck(enabled: boolean): UpdateStatus {
-    this.settings.autoUpdateCheck = enabled
-    this.save()
-    this.update(this.status)
-    return this.status
-  }
-
-  /** Lanza la busqueda diaria si esta habilitada, ya paso un dia y no hay nada en curso */
+  /** Lanza la busqueda si ya paso el intervalo de la periodicidad elegida y no hay nada en curso */
   private autoCheck(): void {
-    const due = Date.now() - this.settings.lastUpdateCheck >= DAY_MS
+    const { updateFrequency } = this.settings.current
+    const due = updateCheckDue(updateFrequency, this.settings.lastUpdateCheck, Date.now())
     const quiet = ['idle', 'up-to-date', 'error'].includes(this.status.state)
-    if (this.settings.autoUpdateCheck && due && quiet) this.check(false)
+    if (due && quiet) this.check(false)
   }
 
   private async check(manual: boolean): Promise<void> {
     if (['unsupported', 'checking', 'downloading', 'downloaded'].includes(this.status.state)) return
     this.manual = manual
     this.settings.lastUpdateCheck = Date.now()
-    this.save()
     // si falla, el evento 'error' ya dejo el estado como corresponde
     await autoUpdater.checkForUpdates().catch(() => undefined)
   }
@@ -114,24 +93,10 @@ export class Updater {
     this.update({ state: 'error', error: error.message.split('\n')[0] })
   }
 
-  private update(status: Omit<UpdateStatus, 'autoCheck'>): void {
-    this.status = { ...status, autoCheck: this.settings.autoUpdateCheck }
+  private update(status: UpdateStatus): void {
+    this.status = status
     for (const window of BrowserWindow.getAllWindows()) {
       if (!window.isDestroyed()) window.webContents.send('updates:changed', this.status)
     }
-  }
-
-  private load(): Settings {
-    if (!existsSync(this.file)) return { ...DEFAULT_SETTINGS }
-    try {
-      return { ...DEFAULT_SETTINGS, ...JSON.parse(readFileSync(this.file, 'utf8')) }
-    } catch (error) {
-      console.error(`No se pudo leer ${this.file}`, error)
-      return { ...DEFAULT_SETTINGS }
-    }
-  }
-
-  private save(): void {
-    writeFileSync(this.file, JSON.stringify(this.settings, null, 2))
   }
 }

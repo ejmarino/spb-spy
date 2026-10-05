@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
-import type { ConnectionStatus, SpbApi, SpEvent, UpdateStatus } from '@shared/types'
+import type { AppSettings, ConnectionStatus, SpbApi, SpEvent, UpdateStatus } from '@shared/types'
 
 function listen<T>(channel: string, callback: (payload: T) => void): () => void {
   const listener = (_: Electron.IpcRendererEvent, payload: T): void => callback(payload)
@@ -23,11 +23,13 @@ const api: SpbApi = {
   onBatch: (callback) => listen<SpEvent[]>('sparkplug:batch', callback),
   onStatus: (callback) => listen<ConnectionStatus>('sparkplug:status', callback),
   getUpdateStatus: () => ipcRenderer.invoke('updates:status'),
-  setAutoUpdateCheck: (enabled) => ipcRenderer.invoke('updates:set-auto-check', enabled),
   checkForUpdates: () => ipcRenderer.invoke('updates:check'),
   downloadUpdate: () => ipcRenderer.invoke('updates:download'),
   installUpdate: () => ipcRenderer.invoke('updates:install'),
-  onUpdateStatus: (callback) => listen<UpdateStatus>('updates:changed', callback)
+  onUpdateStatus: (callback) => listen<UpdateStatus>('updates:changed', callback),
+  getSettings: () => ipcRenderer.invoke('settings:get'),
+  setSettings: (changes) => ipcRenderer.invoke('settings:set', changes),
+  onSettings: (callback) => listen<AppSettings>('settings:changed', callback)
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

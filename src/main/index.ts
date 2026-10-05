@@ -2,6 +2,7 @@ import { app, screen, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
+import { SettingsStore } from './settings'
 import { SparkplugManager } from './sparkplug/manager'
 import { ConnectionStore } from './store'
 import { Updater } from './updater'
@@ -68,9 +69,11 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  manager = new SparkplugManager(new ConnectionStore())
+  const settings = new SettingsStore()
+  settings.registerIpc()
+  manager = new SparkplugManager(new ConnectionStore(), settings)
   manager.registerIpc()
-  new Updater().start()
+  new Updater(settings).start()
 
   createWindow()
 

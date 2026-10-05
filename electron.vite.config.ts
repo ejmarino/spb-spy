@@ -1,6 +1,7 @@
 import { resolve } from 'path'
 import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
+import { productName } from './package.json'
 import { appVersion } from './scripts/app-version'
 
 const shared = { '@shared': resolve('src/shared') }
@@ -21,6 +22,7 @@ export default defineConfig({
     },
     plugins: [react()],
     define: {
+      __APP_NAME__: JSON.stringify(productName),
       __APP_VERSION__: JSON.stringify(appVersion())
     }
   }

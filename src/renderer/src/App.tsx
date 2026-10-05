@@ -1,11 +1,22 @@
 import { useState } from 'react'
-import { Cable, Download, Info, ListTree, Play, Radar, ScrollText, Square } from 'lucide-react'
+import {
+  Cable,
+  Download,
+  Info,
+  ListTree,
+  Play,
+  Radar,
+  ScrollText,
+  Settings as SettingsIcon,
+  Square
+} from 'lucide-react'
 import { connectionLabel } from '@shared/connection'
 import type { UpdateStatus } from '@shared/types'
 import { store, useStoreVersion } from './store'
 import { About } from './views/About'
 import { ConnectionsView } from './views/ConnectionsView'
 import { EventsView } from './views/EventsView'
+import { Settings } from './views/Settings'
 import { TreeView } from './views/TreeView'
 
 type View = 'connections' | 'events' | 'tree'
@@ -34,7 +45,7 @@ function updateNotice({ state, version, percent }: UpdateStatus): string | null 
 function App(): React.JSX.Element {
   useStoreVersion()
   const [view, setView] = useState<View>('connections')
-  const [aboutOpen, setAboutOpen] = useState(false)
+  const [modal, setModal] = useState<'settings' | 'about' | null>(null)
   const notice = updateNotice(store.update)
 
   return (
@@ -87,14 +98,18 @@ function App(): React.JSX.Element {
 
         <div className="sidebar-footer">
           {notice ? (
-            <button className="sidebar-update" onClick={() => setAboutOpen(true)}>
+            <button className="sidebar-update" onClick={() => setModal('settings')}>
               <Download size={14} />
               {notice}
             </button>
           ) : null}
-          <button className="nav-item" onClick={() => setAboutOpen(true)}>
+          <button className="nav-item" onClick={() => setModal('settings')}>
+            <SettingsIcon size={16} />
+            Configuración
+          </button>
+          <button className="nav-item" onClick={() => setModal('about')}>
             <Info size={16} />
-            Acerca de
+            Acerca de {__APP_NAME__}
           </button>
         </div>
       </aside>
@@ -105,7 +120,8 @@ function App(): React.JSX.Element {
         <TreeView active={view === 'tree'} />
       </main>
 
-      {aboutOpen ? <About onClose={() => setAboutOpen(false)} /> : null}
+      {modal === 'settings' ? <Settings onClose={() => setModal(null)} /> : null}
+      {modal === 'about' ? <About onClose={() => setModal(null)} /> : null}
     </div>
   )
 }

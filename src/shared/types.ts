@@ -186,14 +186,22 @@ export type UpdateState =
 
 export interface UpdateStatus {
   state: UpdateState
-  /** Buscar actualizaciones automaticamente una vez por dia */
-  autoCheck: boolean
   /** Version nueva, cuando hay una */
   version?: string
   /** Avance de la descarga, de 0 a 100 */
   percent?: number
   /** Motivo del error */
   error?: string
+}
+
+/** Cada cuanto se buscan actualizaciones automaticamente */
+export type UpdateFrequency = 'daily' | 'weekly' | 'monthly' | 'never'
+
+/** Opciones de la app que el usuario cambia desde "Configuración" */
+export interface AppSettings {
+  updateFrequency: UpdateFrequency
+  /** Cuantos eventos conserva la lista de eventos, entre todas las conexiones */
+  maxEvents: number
 }
 
 export interface SpbApi {
@@ -210,9 +218,12 @@ export interface SpbApi {
   onBatch(callback: (events: SpEvent[]) => void): () => void
   onStatus(callback: (status: ConnectionStatus) => void): () => void
   getUpdateStatus(): Promise<UpdateStatus>
-  setAutoUpdateCheck(enabled: boolean): Promise<UpdateStatus>
   checkForUpdates(): Promise<void>
   downloadUpdate(): Promise<void>
   installUpdate(): Promise<void>
   onUpdateStatus(callback: (status: UpdateStatus) => void): () => void
+  getSettings(): Promise<AppSettings>
+  /** Cambia las opciones indicadas; rechaza si alguna no es valida */
+  setSettings(changes: Partial<AppSettings>): Promise<AppSettings>
+  onSettings(callback: (settings: AppSettings) => void): () => void
 }
