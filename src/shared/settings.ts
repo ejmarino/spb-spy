@@ -8,7 +8,15 @@ export const MAX_EVENTS_RANGE = `${MIN_MAX_EVENTS} y ${MAX_MAX_EVENTS.toLocaleSt
 /** Lo que la lista puede pasarse del maximo antes de recortarla */
 const TRIM_SLACK = 1.2
 
-export const DEFAULT_SETTINGS: AppSettings = { updateFrequency: 'daily', maxEvents: 10_000 }
+/** Sparkplug no los admite en un id, asi que nunca separarian nada */
+const RESERVED_SEPARATORS = '/+#'
+
+export const DEFAULT_SETTINGS: AppSettings = {
+  updateFrequency: 'daily',
+  maxEvents: 10_000,
+  splitLevels: true,
+  levelSeparator: ':'
+}
 
 export const UPDATE_FREQUENCIES: { value: UpdateFrequency; label: string }[] = [
   { value: 'daily', label: 'Diaria' },
@@ -38,6 +46,17 @@ export function validateMaxEvents(value: unknown): string | null {
   return valid ? null : `Un número entero entre ${MAX_EVENTS_RANGE}`
 }
 
+/** Motivo por el que el valor no sirve como separador de niveles, o null si sirve */
+export function validateLevelSeparator(value: unknown): string | null {
+  // por puntos de codigo: un caracter fuera del plano basico cuenta como uno
+  if (typeof value !== 'string' || [...value].length !== 1) return 'Un solo carácter'
+  if (/\s/u.test(value)) return 'No puede ser un espacio en blanco'
+  if (RESERVED_SEPARATORS.includes(value)) {
+    return `No puede ser ${value}: no se admite en un id de Sparkplug`
+  }
+  return null
+}
+
 /** Motivos por los que no se pueden aplicar los cambios; vacio si son validos */
 export function validateSettings(changes: Partial<AppSettings>): string[] {
   const errors: string[] = []
@@ -47,6 +66,13 @@ export function validateSettings(changes: Partial<AppSettings>): string[] {
   if (changes.maxEvents !== undefined) {
     const error = validateMaxEvents(changes.maxEvents)
     if (error) errors.push(`Máximo de eventos: ${error}`)
+  }
+  if (changes.splitLevels !== undefined && typeof changes.splitLevels !== 'boolean') {
+    errors.push('Separar en niveles: tiene que ser sí o no')
+  }
+  if (changes.levelSeparator !== undefined) {
+    const error = validateLevelSeparator(changes.levelSeparator)
+    if (error) errors.push(`Carácter separador: ${error}`)
   }
   return errors
 }
@@ -65,7 +91,13 @@ export function normalizeSettings(raw: unknown): AppSettings {
     validateMaxEvents(stored.maxEvents) === null
       ? (stored.maxEvents as number)
       : DEFAULT_SETTINGS.maxEvents
-  return { updateFrequency, maxEvents }
+  const splitLevels =
+    typeof stored.splitLevels === 'boolean' ? stored.splitLevels : DEFAULT_SETTINGS.splitLevels
+  const levelSeparator =
+    validateLevelSeparator(stored.levelSeparator) === null
+      ? (stored.levelSeparator as string)
+      : DEFAULT_SETTINGS.levelSeparator
+  return { updateFrequency, maxEvents, splitLevels, levelSeparator }
 }
 
 /** Ya paso el intervalo de la periodicidad desde la ultima busqueda */

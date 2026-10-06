@@ -227,12 +227,13 @@ export function TreeView({ active }: { active: boolean }): React.JSX.Element | n
   /** Fila elegida para mandarle un comando */
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
 
-  const { connections, structure } = store
+  const { connections, structure, settings } = store
+  const separator = settings.splitLevels ? settings.levelSeparator : null
   const roots = useMemo(
-    () => (active ? buildTree(connections, (id) => store.model(id)) : []),
+    () => (active ? buildTree(connections, (id) => store.model(id), separator) : []),
     // structure avisa cuando cambio la forma del arbol dentro de los modelos
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [active, connections, structure]
+    [active, connections, structure, separator]
   )
   const rows = useMemo(() => {
     const isOpen = (item: TreeItem): boolean => overrides.get(item.key) ?? defaultOpen(item)

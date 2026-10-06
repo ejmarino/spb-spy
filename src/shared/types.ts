@@ -202,6 +202,10 @@ export interface AppSettings {
   updateFrequency: UpdateFrequency
   /** Cuantos eventos conserva la lista de eventos, entre todas las conexiones */
   maxEvents: number
+  /** Los ids de grupo, nodo y device se abren en niveles por `levelSeparator` */
+  splitLevels: boolean
+  /** Caracter que separa los niveles dentro de un id; se conserva aunque no se use */
+  levelSeparator: string
 }
 
 export interface SpbApi {

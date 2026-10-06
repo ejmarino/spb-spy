@@ -1,8 +1,14 @@
 import { useState } from 'react'
 import { TriangleAlert, X } from 'lucide-react'
-import { MAX_EVENTS_RANGE, UPDATE_FREQUENCIES, validateMaxEvents } from '@shared/settings'
+import {
+  MAX_EVENTS_RANGE,
+  UPDATE_FREQUENCIES,
+  validateLevelSeparator,
+  validateMaxEvents
+} from '@shared/settings'
 import type { UpdateFrequency, UpdateStatus } from '@shared/types'
 import { Field } from '../components/Field'
+import { Toggle } from '../components/Toggle'
 import { store, useStoreVersion } from '../store'
 
 /** Texto que acompaña al boton de actualizaciones, segun en que anda la busqueda */
@@ -88,6 +94,48 @@ function MaxEventsField({ value }: { value: number }): React.JSX.Element {
   )
 }
 
+/**
+ * Se aplica al salir del campo o con Enter, igual que el maximo de eventos. El
+ * texto va sin recortar: un espacio tiene que llegar a la validacion.
+ */
+function LevelSeparatorField({
+  value,
+  disabled
+}: {
+  value: string
+  disabled: boolean
+}): React.JSX.Element {
+  const [draft, setDraft] = useState(value)
+  const [error, setError] = useState<string | null>(null)
+
+  const commit = (): void => {
+    const invalid = validateLevelSeparator(draft)
+    setError(invalid)
+    if (!invalid && draft !== value) store.setSettings({ levelSeparator: draft })
+  }
+
+  return (
+    <Field
+      label="Carácter separador"
+      hint="Un solo carácter. Los ids de grupo, nodo y device se abren en una rama por cada tramo: con «:», sala:tanque1 queda como tanque1 dentro de sala."
+      error={error ?? undefined}
+    >
+      <input
+        className="input-short"
+        value={draft}
+        disabled={disabled}
+        spellCheck={false}
+        onChange={(e) => {
+          setDraft(e.target.value)
+          setError(null)
+        }}
+        onBlur={commit}
+        onKeyDown={(e) => e.key === 'Enter' && commit()}
+      />
+    </Field>
+  )
+}
+
 export function Settings({ onClose }: { onClose: () => void }): React.JSX.Element {
   useStoreVersion()
   const { update, settings } = store
@@ -139,6 +187,21 @@ export function Settings({ onClose }: { onClose: () => void }): React.JSX.Elemen
             <h3>Eventos</h3>
             {/* la clave rearma el campo cuando el valor vigente cambia por fuera */}
             <MaxEventsField key={settings.maxEvents} value={settings.maxEvents} />
+          </section>
+
+          <section className="settings-section">
+            <h3>Árbol de datos</h3>
+            <Toggle
+              checked={settings.splitLevels}
+              onChange={(splitLevels) => store.setSettings({ splitLevels })}
+              label="Separar los nombres en niveles"
+              hint="Apagado, cada id de grupo, nodo y device se muestra entero"
+            />
+            <LevelSeparatorField
+              key={settings.levelSeparator}
+              value={settings.levelSeparator}
+              disabled={!settings.splitLevels}
+            />
           </section>
         </div>
       </div>

@@ -37,13 +37,13 @@ export interface TreeItem {
   offlineBelow: number
 }
 
-/** Separador de niveles dentro de un group, node o device id */
-const SEGMENT_SEPARATOR = ':'
 const KEY_SEPARATOR = '\u0001'
 const sorter = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
 
-function segments(id: string): string[] {
-  const parts = id.split(SEGMENT_SEPARATOR).filter((part) => part !== '')
+/** Niveles de un group, node o device id; sin separador, el id entero es un solo nivel */
+function segments(id: string, separator: string | null): string[] {
+  if (separator === null) return [id]
+  const parts = id.split(separator).filter((part) => part !== '')
   return parts.length ? parts : [id]
 }
 
@@ -71,6 +71,8 @@ function createItem(
 class Builder {
   private readonly index = new Map<string, TreeItem>()
 
+  constructor(private readonly separator: string | null) {}
+
   child(parent: TreeItem, kind: TreeKind, label: string, id = label): TreeItem {
     const item = createItem(parent, parent.connection, kind, label, id)
     const existing = this.index.get(item.key)
@@ -83,7 +85,7 @@ class Builder {
   /** Baja por los tramos de un id tipo "sala:tanque1" creando una rama por tramo */
   path(parent: TreeItem, kind: TreeKind, id: string): TreeItem {
     let item = parent
-    for (const segment of segments(id)) item = this.child(item, kind, segment)
+    for (const segment of segments(id, this.separator)) item = this.child(item, kind, segment)
     return item
   }
 
@@ -241,11 +243,13 @@ function finish(item: TreeItem): void {
 
 export function buildTree(
   connections: ConnectionConfig[],
-  model: (id: string) => ConnectionModel | undefined
+  model: (id: string) => ConnectionModel | undefined,
+  /** Caracter que abre en niveles los ids de grupo, nodo y device; null para no abrirlos */
+  separator: string | null
 ): TreeItem[] {
   return connections.map((connection) => {
     const root = createItem(null, connection, 'connection', connection.name, connection.id)
-    const builder = new Builder()
+    const builder = new Builder(separator)
     for (const node of model(connection.id)?.nodes.values() ?? []) {
       const group = builder.path(root, 'group', node.group)
       const nodeItem = builder.path(group, 'node', node.id)

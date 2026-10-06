@@ -192,7 +192,9 @@ conexión
 ```
 
 - Los ids de grupo, nodo y device que contienen `:` se abren en ramas. Los
-  devices `sala:tanque1` y `sala:tanque2` quedan los dos dentro de `sala`.
+  devices `sala:tanque1` y `sala:tanque2` quedan los dos dentro de `sala`. El
+  carácter se puede cambiar, y la separación deshabilitar, desde la
+  [configuración](#configuración).
 - Cada nivel tiene su icono y color (conexión, group, nodo, device, métrica,
   UDT), así una rama intermedia se reconoce como parte de un grupo, un nodo o un
   device.
@@ -315,6 +317,22 @@ cambio se guarda y se aplica en el momento, sin reiniciar ni reconectar.
   bajarlo se descartan en el momento los eventos más viejos; el árbol de datos
   no cambia. Más eventos ocupan más memoria, sobre todo si hay mensajes con
   muchas métricas.
+
+- **Separar los nombres en niveles**: encendida por defecto. Apagada, cada id
+  de grupo, nodo y device se muestra entero en el árbol de datos, como un solo
+  nivel.
+- **Carácter separador**: el carácter que parte esos ids en niveles; por
+  defecto, `:`. Tiene que ser un solo carácter y no puede ser un espacio en
+  blanco ni `/`, `+` o `#`, que Sparkplug no admite en un id. Se aplica al salir
+  del campo o con Enter, y se conserva aunque la separación esté apagada.
+  - Los tramos vacíos se descartan: `sala::tanque1` y `:sala:tanque1:` quedan
+    igual que `sala:tanque1`.
+  - Los nombres de las métricas no se separan.
+  - Un carácter muy común en los ids, como `-` o `_`, puede partir nombres que
+    no eran una jerarquía y llenar el árbol de ramas con un solo elemento.
+  - Al cambiar cualquiera de las dos opciones el árbol se rearma en el momento.
+    Las ramas que cambian de forma vuelven a quedar abiertas o cerradas como al
+    principio.
 
 Las opciones se guardan en `settings.json`, en la misma carpeta que las
 conexiones.

@@ -45,8 +45,11 @@ export class SettingsStore {
     const errors = validateSettings(changes)
     if (errors.length) throw new Error(errors.join('. '))
 
-    const { updateFrequency, maxEvents } = { ...this.settings, ...changes }
-    this.settings = { updateFrequency, maxEvents }
+    const { updateFrequency, maxEvents, splitLevels, levelSeparator } = {
+      ...this.settings,
+      ...changes
+    }
+    this.settings = { updateFrequency, maxEvents, splitLevels, levelSeparator }
     this.save()
     for (const listener of this.listeners) listener(this.settings)
     for (const window of BrowserWindow.getAllWindows()) {
