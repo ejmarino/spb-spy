@@ -177,7 +177,11 @@ function updateAt(leaf: Updated): number {
   return (leaf.updates ?? 1) > 1 ? (leaf.updatedAt ?? 0) : 0
 }
 
-function latestUpdateAt(item: TreeItem): number {
+/**
+ * Momento de la ultima actualizacion que destellaria en la fila o en lo que cuelga
+ * de ella; 0 si no hay. En la fila de un UDT cuentan sus miembros.
+ */
+export function latestUpdateAt(item: TreeItem): number {
   if (!item.metric) {
     return item.children.reduce((at, child) => Math.max(at, latestUpdateAt(child)), 0)
   }

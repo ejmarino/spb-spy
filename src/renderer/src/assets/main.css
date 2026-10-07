@@ -1830,6 +1830,89 @@ textarea {
   margin-top: 2px;
 }
 
+/* ---------- visualizacion de datos ---------- */
+
+.graph-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  /* mas oscuro que los paneles: la luz de los halos se suma sobre el fondo */
+  background: var(--bg);
+}
+
+.graph-stage canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+}
+
+.graph-stage canvas:active {
+  cursor: grabbing;
+}
+
+.graph-stage .empty {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.graph-legend {
+  position: absolute;
+  right: 12px;
+  bottom: 10px;
+  pointer-events: none;
+}
+
+/* circulo hueco, como se dibuja una rama intermedia del color de su nivel */
+.graph-legend-ring {
+  width: 11px;
+  height: 11px;
+  border: 1.5px solid var(--kind-device);
+  border-radius: 50%;
+}
+
+.graph-tip {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-width: 280px;
+  padding: 8px 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--panel-3);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
+  pointer-events: none;
+}
+
+.graph-tip-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.graph-tip-value {
+  font-family: var(--mono);
+  overflow-wrap: anywhere;
+}
+
+.graph-tip-facts {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
 @keyframes fresh {
   from {
     background: color-mix(in srgb, var(--accent) 45%, transparent);

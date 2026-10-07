@@ -2,8 +2,9 @@
 
 Visor de tráfico **Sparkplug B** sobre MQTT. Se conecta a uno o varios brokers, se
 anuncia como Host Application, decodifica lo que publican los edge nodes y lo
-muestra de dos maneras: como una lista de eventos en orden de llegada y como un
-árbol con el último valor de cada métrica.
+muestra de tres maneras: como una lista de eventos en orden de llegada, como un
+árbol con el último valor de cada métrica y como un grafo animado de la
+actividad.
 
 Está pensado para diagnosticar y desarrollar: ver qué publica un nodo, detectar
 mensajes que no cumplen la norma, saltos de secuencia, alias sin resolver, y
@@ -18,6 +19,7 @@ Es una app de escritorio hecha con Electron, React y TypeScript.
 - [Comportamiento como host Sparkplug](#comportamiento-como-host-sparkplug)
 - [Pantalla de eventos](#pantalla-de-eventos)
 - [Árbol de datos](#árbol-de-datos)
+- [Visualización de datos](#visualización-de-datos)
 - [UDT (templates)](#udt-templates)
 - [Tipos de datos](#tipos-de-datos)
 - [Envío de comandos](#envío-de-comandos)
@@ -42,6 +44,8 @@ Es una app de escritorio hecha con Electron, React y TypeScript.
   los comandos de escritura).
 - Lista de eventos con filtros por texto, conexión y tipo de mensaje.
 - Árbol de datos en vivo, con el estado de cada nodo y device.
+- Visualización de datos: la misma jerarquía como un grafo animado, para ver de
+  un vistazo dónde hay actividad.
 
 ## Conexiones
 
@@ -227,6 +231,49 @@ conexión
 Las ramas superiores muestran un contador `N offline`, para notar una caída
 aunque la rama esté colapsada. Un nodo o device del que llegaron datos pero no
 su BIRTH lleva la etiqueta `sin BIRTH`.
+
+## Visualización de datos
+
+Muestra lo mismo que el árbol de datos como un grafo animado, pensado para mirar
+la actividad y no para leer valores:
+
+- Cada conexión, grupo, nodo y device es un círculo con su nombre, unido al
+  elemento del que depende. Los ids se abren en niveles con la misma regla que
+  el árbol, según la [configuración](#configuración); una rama intermedia, que
+  no es un nodo ni un device, se dibuja hueca, y así figura en la leyenda.
+- Cada métrica es un punto alrededor de su nodo o device, sin nombre. Un UDT es
+  un solo punto, de otro color.
+- Un punto brilla un instante cuando su métrica se actualiza, con la misma regla
+  que el destello del árbol: el primer valor, el del BIRTH, no cuenta. El punto
+  de un UDT brilla cuando cambia cualquiera de sus miembros.
+- Cada mensaje de datos manda un pulso por las líneas, desde el nodo o device
+  que lo publicó hasta su conexión. Si los mensajes llegan muy seguidos
+  comparten pulso: la rama queda encendida mientras dura el tráfico.
+- Un nodo o device offline se ve en gris, con sus puntos; uno sin confirmación
+  en vivo, atenuado. Un grupo o una rama intermedia toman el estado de lo que
+  cuelga de ellos.
+- Al apuntar a un punto aparece el nombre de la métrica, su valor con la
+  unidad, el tipo y la hora. Sobre un nodo o device, su id, su estado y cuántas
+  métricas tiene.
+- El grafo es un entramado elástico: los elementos se repelen y se acomodan
+  solos. Se puede agarrar cualquiera con el mouse, por su círculo o por sus
+  puntos, y llevarlo a otro lado; al soltarlo vuelve a quedar sujeto a las
+  fuerzas y todo se reacomoda. Los puntos siguen a su elemento con un pequeño
+  retraso.
+- Los puntos y los elementos en línea tienen un halo de luz, que se suma donde
+  se superponen; lo que está offline no lo tiene.
+- La rueda del mouse acerca y aleja, y arrastrando sobre el fondo se mueve el
+  lienzo. **Encuadrar** vuelve a mostrar todo. Hasta que se mueve o se acerca el lienzo,
+  el encuadre sigue solo al grafo a medida que crece.
+- Al alejarse se ocultan los nombres que no se leerían, primero los de los
+  devices, y los puntos de cada device pasan a verse como una mancha que se
+  enciende cuando publica.
+- Un rebirth de algo que ya estaba no mueve nada. Lo que aparece nuevo nace
+  junto a su nodo y el grafo se acomoda para darle lugar. La disposición se
+  conserva al pasar a otra pantalla, pero no entre sesiones.
+
+Desde esta vista no se buscan métricas ni se envían comandos: para eso está el
+árbol de datos.
 
 ## UDT (templates)
 

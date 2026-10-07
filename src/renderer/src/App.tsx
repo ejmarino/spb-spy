@@ -4,6 +4,7 @@ import {
   Download,
   Info,
   ListTree,
+  Orbit,
   Play,
   Radar,
   ScrollText,
@@ -16,15 +17,17 @@ import { store, useStoreVersion } from './store'
 import { About } from './views/About'
 import { ConnectionsView } from './views/ConnectionsView'
 import { EventsView } from './views/EventsView'
+import { GraphView } from './views/GraphView'
 import { Settings } from './views/Settings'
 import { TreeView } from './views/TreeView'
 
-type View = 'connections' | 'events' | 'tree'
+type View = 'connections' | 'events' | 'tree' | 'graph'
 
 const VIEWS = [
   { id: 'connections', label: 'Conexiones', icon: Cable },
   { id: 'events', label: 'Eventos', icon: ScrollText },
-  { id: 'tree', label: 'Árbol de datos', icon: ListTree }
+  { id: 'tree', label: 'Árbol de datos', icon: ListTree },
+  { id: 'graph', label: 'Visualización de datos', icon: Orbit }
 ] as const
 
 const STATE_TITLES = {
@@ -118,6 +121,7 @@ function App(): React.JSX.Element {
         <ConnectionsView active={view === 'connections'} />
         <EventsView active={view === 'events'} />
         <TreeView active={view === 'tree'} />
+        <GraphView active={view === 'graph'} />
       </main>
 
       {modal === 'settings' ? <Settings onClose={() => setModal(null)} /> : null}
