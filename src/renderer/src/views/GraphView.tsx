@@ -79,6 +79,16 @@ const PULSE_RADIUS = 2.6
 const PULSE_TAIL = 0.35
 /** Temperatura a la que se mantiene la simulacion mientras se arrastra un elemento */
 const DRAG_HEAT = 0.3
+/*
+ * Union entre dos conexiones. Se forma cuando una, llevada con el mouse, llega
+ * a menos de BOND_REACH de la otra: como las conexiones se rechazan, hace falta
+ * acercarla rapido. Unidas, un resorte las mantiene a BOND_LENGTH; si al
+ * arrastrar una el resorte se estira mas alla de BOND_BREAK, se sueltan.
+ */
+const BOND_REACH = 38
+const BOND_LENGTH = 50
+const BOND_BREAK = 110
+const BOND_STRENGTH = 0.3
 /** Resorte con el que cada punto persigue su lugar, y cuanto pierde por cuadro */
 const DOT_SPRING = 0.2
 const DOT_DAMPING = 0.72
@@ -255,6 +265,7 @@ class GraphEngine {
     )
     .force('x', forceX<GraphElement>(0).strength(CENTERING))
     .force('y', forceY<GraphElement>(0).strength(CENTERING))
+    .force('bond', () => this.applyBonds())
     .alphaDecay(COOLING)
     .stop()
 
@@ -270,6 +281,8 @@ class GraphEngine {
   private readonly lastPulse = new Map<string, number>()
   /** Donde esta la cabeza de cada pulso en el cuadro que se esta dibujando */
   private pulseHeads: { x: number; y: number }[] = []
+  /** Conexiones unidas entre si por el usuario, de a pares de claves */
+  private readonly bonds = new Map<string, [string, string]>()
 
   private canvas: HTMLCanvasElement | null = null
   private context: CanvasRenderingContext2D | null = null
@@ -363,6 +376,47 @@ class GraphEngine {
       this.context = null
       this.release()
       this.pointer = null
+    }
+  }
+
+  /**
+   * Fuerza de las uniones entre conexiones: forma las que el arrastre acaba de
+   * provocar, suelta las que el arrastre estiro de mas y tira de las demas.
+   */
+  private applyBonds(): void {
+    const { byKey, elements } = this.graph
+    const grabbed = this.grab ? byKey.get(this.grab.key) : undefined
+    if (grabbed && !grabbed.parent) {
+      for (const other of elements) {
+        if (other.parent || other === grabbed) continue
+        const distance = Math.hypot(other.x - grabbed.x, other.y - grabbed.y)
+        if (distance >= BOND_REACH) continue
+        const pair: [string, string] =
+          grabbed.key < other.key ? [grabbed.key, other.key] : [other.key, grabbed.key]
+        this.bonds.set(pair.join('\n'), pair)
+      }
+    }
+    for (const [id, [first, second]] of this.bonds) {
+      const from = byKey.get(first)
+      const to = byKey.get(second)
+      if (!from || !to) {
+        this.bonds.delete(id)
+        continue
+      }
+      const dx = to.x - from.x
+      const dy = to.y - from.y
+      const distance = Math.hypot(dx, dy) || 1
+      // solo un tiron del usuario las separa: las fuerzas del grafo no alcanzan
+      if (distance > BOND_BREAK && (grabbed === from || grabbed === to)) {
+        this.bonds.delete(id)
+        continue
+      }
+      if (distance <= BOND_LENGTH) continue
+      const pull = ((distance - BOND_LENGTH) / distance) * BOND_STRENGTH * 0.5
+      from.vx = (from.vx ?? 0) + dx * pull
+      from.vy = (from.vy ?? 0) + dy * pull
+      to.vx = (to.vx ?? 0) - dx * pull
+      to.vy = (to.vy ?? 0) - dy * pull
     }
   }
 
@@ -689,6 +743,21 @@ class GraphEngine {
       context.lineTo(element.parent.x, element.parent.y)
     }
     context.stroke()
+
+    // la union entre dos conexiones se ve como un lazo de luz
+    context.strokeStyle = '#fff'
+    context.lineWidth = 2.5
+    context.globalAlpha = 0.55
+    context.beginPath()
+    for (const [first, second] of this.bonds.values()) {
+      const from = this.graph.byKey.get(first)
+      const to = this.graph.byKey.get(second)
+      if (!from || !to) continue
+      context.moveTo(from.x, from.y)
+      context.lineTo(to.x, to.y)
+    }
+    context.stroke()
+    context.globalAlpha = 1
 
     const visible = elements.filter(inView)
     const far = DOT_RADIUS * k < DOT_MIN_SCREEN

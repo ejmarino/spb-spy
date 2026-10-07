@@ -267,6 +267,9 @@ la actividad y no para leer valores:
   puntos, y llevarlo a otro lado; al soltarlo vuelve a quedar sujeto a las
   fuerzas y todo se reacomoda. Los puntos siguen a su elemento con un pequeño
   retraso.
+- Las conexiones se rechazan entre sí, pero se pueden unir: si se acerca una a
+  otra rápido con el mouse quedan pegadas, con un lazo de luz entre las dos. Al
+  mover una despacio la otra la acompaña; con un tirón se sueltan.
 - Los puntos y los elementos en línea tienen un halo de luz, que se suma donde
   se superponen; lo que está offline no lo tiene.
 - La rueda del mouse acerca y aleja, y arrastrando sobre el fondo se mueve el
