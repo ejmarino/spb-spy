@@ -1,6 +1,13 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
-import type { AppSettings, ConnectionStatus, SpbApi, SpEvent, UpdateStatus } from '@shared/types'
+import type {
+  AppSettings,
+  ConnectionStats,
+  ConnectionStatus,
+  SpbApi,
+  SpEvent,
+  UpdateStatus
+} from '@shared/types'
 
 function listen<T>(channel: string, callback: (payload: T) => void): () => void {
   const listener = (_: Electron.IpcRendererEvent, payload: T): void => callback(payload)
@@ -22,6 +29,7 @@ const api: SpbApi = {
   getSnapshot: () => ipcRenderer.invoke('sparkplug:snapshot'),
   onBatch: (callback) => listen<SpEvent[]>('sparkplug:batch', callback),
   onStatus: (callback) => listen<ConnectionStatus>('sparkplug:status', callback),
+  onStats: (callback) => listen<ConnectionStats[]>('sparkplug:stats', callback),
   getUpdateStatus: () => ipcRenderer.invoke('updates:status'),
   checkForUpdates: () => ipcRenderer.invoke('updates:check'),
   downloadUpdate: () => ipcRenderer.invoke('updates:download'),

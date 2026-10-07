@@ -4,6 +4,7 @@ import { DEFAULT_SETTINGS, trimEvents } from '@shared/settings'
 import type {
   AppSettings,
   ConnectionConfig,
+  ConnectionStats,
   ConnectionStatus,
   SpEvent,
   UpdateStatus
@@ -31,6 +32,7 @@ class Store {
   now = Date.now()
 
   private readonly statuses = new Map<string, ConnectionStatus>()
+  private stats = new Map<string, ConnectionStats>()
   private readonly models = new Map<string, ConnectionModel>()
   private readonly listeners = new Set<() => void>()
   private started = false
@@ -55,6 +57,11 @@ class Store {
     })
     window.api.onStatus((status) => {
       this.statuses.set(status.id, status)
+      this.notify()
+    })
+    window.api.onStats((stats) => {
+      // llegan solo las conexiones conectadas: lo que no viene ya no tiene caudal
+      this.stats = new Map(stats.map((stat) => [stat.id, stat]))
       this.notify()
     })
     const setUpdate = (status: UpdateStatus): void => {
@@ -92,6 +99,11 @@ class Store {
     return this.statuses.get(id)
   }
 
+  /** Caudal de la conexion; sin datos todavia cuenta como cero */
+  rates(id: string): ConnectionStats {
+    return this.stats.get(id) ?? { id, messages: 0, metrics: 0, bytes: 0, gaps: 0 }
+  }
+
   model(id: string): ConnectionModel | undefined {
     return this.models.get(id)
   }
@@ -120,6 +132,7 @@ class Store {
     const ids = new Set(connections.map((c) => c.id))
     for (const id of [...this.models.keys()]) if (!ids.has(id)) this.models.delete(id)
     for (const id of [...this.statuses.keys()]) if (!ids.has(id)) this.statuses.delete(id)
+    for (const id of [...this.stats.keys()]) if (!ids.has(id)) this.stats.delete(id)
     this.events = this.events.filter((event) => ids.has(event.connectionId))
     this.structure++
     this.notify()

@@ -15,6 +15,7 @@ import {
   type ConnectionState,
   type MetricCommand,
   type NewEvent,
+  type ReceivedCounts,
   type SpMessageType,
   type SpMetric
 } from '@shared/types'
@@ -69,6 +70,8 @@ function statePayload(online: boolean, timestamp: number): string {
 export class SparkplugSession {
   readonly model: ConnectionModel = createModel()
   active = false
+  /** Saltos de secuencia desde que el usuario conecto; las reconexiones no la reinician */
+  gaps = 0
 
   private client: MqttClient | null = null
   private linked = false
@@ -84,6 +87,8 @@ export class SparkplugSession {
   private readonly sequences = new Map<string, number>()
   /** Mensajes publicados hace poco, para reconocer su eco cuando vuelve por la suscripcion */
   private readonly sentRecently: { topic: string; payload: Buffer; at: number }[] = []
+  /** Lo recibido del broker desde la ultima vez que se pidio la cuenta */
+  private received: ReceivedCounts = { messages: 0, metrics: 0, bytes: 0 }
 
   constructor(
     readonly config: ConnectionConfig,
@@ -98,6 +103,8 @@ export class SparkplugSession {
     if (this.active) return
     this.active = true
     this.reportedError = null
+    this.gaps = 0
+    this.takeReceived()
     this.hooks.status('connecting')
     this.open()
   }
@@ -139,6 +146,13 @@ export class SparkplugSession {
     }
     if (wasLinked) this.system('info', 'Desconectado', 'down')
     this.hooks.status('disconnected')
+  }
+
+  /** Entrega lo recibido desde el pedido anterior y vuelve a contar desde cero */
+  takeReceived(): ReceivedCounts {
+    const received = this.received
+    this.received = { messages: 0, metrics: 0, bytes: 0 }
+    return received
   }
 
   /** Pedido manual desde la interfaz: no respeta la espera entre intentos */
@@ -328,6 +342,10 @@ export class SparkplugSession {
   private onMessage(topic: string, payload: Buffer, retained: boolean, sent = false): void {
     // lo que el broker tiene retenido se muestra aunque lo haya publicado esta app
     if (!sent && !retained && this.isEcho(topic, payload)) return
+    if (!sent) {
+      this.received.messages++
+      this.received.bytes += payload.length
+    }
     const certificate = topic.startsWith(CERTIFICATES_PREFIX)
     const parsed = parseTopic(certificate ? topic.slice(CERTIFICATES_PREFIX.length) : topic)
     const base: NewEvent = {
@@ -501,6 +519,7 @@ export class SparkplugSession {
       })
       return false
     }
+    if (!event.sent) this.received.metrics += decoded.metrics.length
     if (has(decoded, 'timestamp')) event.timestamp = Number(longValue(decoded.timestamp))
     if (has(decoded, 'seq')) event.seq = Number(longValue(decoded.seq))
     event.metrics = decoded.metrics.map((metric) => toMetric(metric, scope))
@@ -525,6 +544,7 @@ export class SparkplugSession {
     if (type === 'NBIRTH' || last === undefined) return
     const expected = (last + 1) % SEQ_MODULO
     if (event.seq !== expected) {
+      this.gaps++
       event.seqExpected = expected
       event.level = 'warn'
     }

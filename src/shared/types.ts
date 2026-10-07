@@ -43,6 +43,20 @@ export interface ConnectionStatus {
   error?: string
 }
 
+/** Lo que una conexion recibio del broker, sin contar lo que publica la app */
+export interface ReceivedCounts {
+  messages: number
+  metrics: number
+  bytes: number
+}
+
+/** Caudal de una conexion conectada: promedio por segundo de los ultimos segundos */
+export interface ConnectionStats extends ReceivedCounts {
+  id: string
+  /** Saltos de secuencia desde que el usuario la conecto */
+  gaps: number
+}
+
 export type SpMessageType =
   'NBIRTH' | 'NDEATH' | 'DBIRTH' | 'DDEATH' | 'NDATA' | 'DDATA' | 'NCMD' | 'DCMD' | 'STATE'
 
@@ -221,6 +235,8 @@ export interface SpbApi {
   getSnapshot(): Promise<Snapshot>
   onBatch(callback: (events: SpEvent[]) => void): () => void
   onStatus(callback: (status: ConnectionStatus) => void): () => void
+  /** Caudal de las conexiones conectadas; llega una vez por segundo mientras cambia */
+  onStats(callback: (stats: ConnectionStats[]) => void): () => void
   getUpdateStatus(): Promise<UpdateStatus>
   checkForUpdates(): Promise<void>
   downloadUpdate(): Promise<void>

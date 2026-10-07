@@ -9,10 +9,12 @@ import {
   Radar,
   ScrollText,
   Settings as SettingsIcon,
-  Square
+  Square,
+  TriangleAlert
 } from 'lucide-react'
 import { connectionLabel } from '@shared/connection'
-import type { UpdateStatus } from '@shared/types'
+import type { ConnectionStats, UpdateStatus } from '@shared/types'
+import { formatByteRate, formatRate, plural } from './format'
 import { store, useStoreVersion } from './store'
 import { About } from './views/About'
 import { ConnectionsView } from './views/ConnectionsView'
@@ -43,6 +45,34 @@ function updateNotice({ state, version, percent }: UpdateStatus): string | null 
   if (state === 'downloading') return `Descargando ${version}… ${percent ?? 0} %`
   if (state === 'downloaded') return `Versión ${version} lista para instalar`
   return null
+}
+
+/** Caudal de una conexion conectada, debajo de su nombre en el panel lateral */
+function ConnectionRates({ stats }: { stats: ConnectionStats }): React.JSX.Element {
+  const gaps = stats.gaps ? plural(stats.gaps, 'salto') : null
+  const title = [
+    'Promedio de los últimos 5 segundos:',
+    `${formatRate(stats.messages)} mensajes por segundo`,
+    `${formatRate(stats.metrics)} métricas por segundo`,
+    `${formatByteRate(stats.bytes)} de payload`,
+    gaps
+      ? `\n${gaps} de secuencia desde que se conectó: puede haber mensajes perdidos, o un nodo que numera mal.`
+      : ''
+  ]
+    .filter(Boolean)
+    .join('\n')
+  return (
+    <div className="sidebar-rates" title={title}>
+      <span>{formatRate(stats.messages)} msg/s</span>
+      <span>{formatRate(stats.metrics)} mét/s</span>
+      <span>{formatByteRate(stats.bytes)}</span>
+      {gaps ? (
+        <span className="sidebar-gaps">
+          <TriangleAlert size={11} /> {gaps}
+        </span>
+      ) : null}
+    </div>
+  )
 }
 
 function App(): React.JSX.Element {
@@ -82,17 +112,24 @@ function App(): React.JSX.Element {
             const idle = state === 'disconnected'
             return (
               <li key={connection.id} style={{ '--conn': connection.color } as React.CSSProperties}>
-                <span className={`state-dot state-${state}`} title={STATE_TITLES[state]} />
-                <span className="sidebar-connection-name">{connectionLabel(connection)}</span>
-                <button
-                  className="icon-button"
-                  title={idle ? 'Conectar' : 'Desconectar'}
-                  onClick={() =>
-                    idle ? window.api.connect(connection.id) : window.api.disconnect(connection.id)
-                  }
-                >
-                  {idle ? <Play size={13} /> : <Square size={12} />}
-                </button>
+                <div className="sidebar-connection">
+                  <span className={`state-dot state-${state}`} title={STATE_TITLES[state]} />
+                  <span className="sidebar-connection-name">{connectionLabel(connection)}</span>
+                  <button
+                    className="icon-button"
+                    title={idle ? 'Conectar' : 'Desconectar'}
+                    onClick={() =>
+                      idle
+                        ? window.api.connect(connection.id)
+                        : window.api.disconnect(connection.id)
+                    }
+                  >
+                    {idle ? <Play size={13} /> : <Square size={12} />}
+                  </button>
+                </div>
+                {state === 'connected' ? (
+                  <ConnectionRates stats={store.rates(connection.id)} />
+                ) : null}
               </li>
             )
           })}

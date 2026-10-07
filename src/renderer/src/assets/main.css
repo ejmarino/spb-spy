@@ -182,12 +182,38 @@ textarea {
 }
 
 .sidebar-connections li {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   padding: 4px 4px 4px 10px;
   border-radius: 6px;
   color: var(--text-2);
+}
+
+.sidebar-connection {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Caudal de la conexion: si no entra en un renglon baja de a un valor entero */
+.sidebar-rates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 8px;
+  padding: 0 0 2px 17px;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+}
+
+.sidebar-rates span {
+  white-space: nowrap;
+}
+
+.sidebar-gaps {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--amber);
 }
 
 .sidebar-connections li:hover {

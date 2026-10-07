@@ -101,3 +101,20 @@ export function engUnit(properties: Record<string, SpProperty> | undefined): str
 export function plural(count: number, singular: string, pluralForm = `${singular}s`): string {
   return `${count} ${count === 1 ? singular : pluralForm}`
 }
+
+function oneDecimal(value: number): string {
+  return value.toFixed(1).replace('.', ',')
+}
+
+/** Cantidad por segundo en poco espacio: 0,2 · 7 · 120 · 3,4k */
+export function formatRate(value: number): string {
+  if (value >= 999.5) return `${oneDecimal(value / 1000)}k`
+  const tenths = Math.round(value * 10) / 10
+  return tenths < 10 && !Number.isInteger(tenths) ? oneDecimal(tenths) : String(Math.round(value))
+}
+
+/** Bytes por segundo en kB/s, o en MB/s a partir de 1.000 kB/s */
+export function formatByteRate(bytes: number): string {
+  const kb = bytes / 1000
+  return kb >= 999.5 ? `${oneDecimal(kb / 1000)} MB/s` : `${formatRate(kb)} kB/s`
+}

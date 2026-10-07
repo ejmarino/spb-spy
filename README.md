@@ -74,6 +74,13 @@ Si se pierde la conexión con el broker, la app reintenta cada 5 segundos. Edita
 una conexión que está en uso la reconecta con la configuración nueva y descarta
 los datos que tenía en el árbol.
 
+Mientras una conexión está conectada, la barra lateral muestra debajo de su
+nombre cuánto recibe: mensajes, métricas y kB por segundo, como promedio de los
+últimos 5 segundos. Cuenta todo lo que entrega el broker, Sparkplug o no, y no
+cuenta lo que publica la propia app. Si desde que se conectó hubo saltos de
+secuencia, muestra también cuántos: pueden ser mensajes perdidos o un nodo que
+numera mal.
+
 Las conexiones se guardan en `connections.json`, dentro de la carpeta de datos
 del usuario (`~/.config/SpbSpy` en Linux, `%APPDATA%\SpbSpy` en Windows). La
 contraseña se guarda cifrada cuando el sistema ofrece un almacén de credenciales.

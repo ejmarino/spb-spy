@@ -4,9 +4,11 @@ import { applyEvent, serializeModel } from '@shared/model'
 import { trimEvents } from '@shared/settings'
 import type {
   ConnectionConfig,
+  ConnectionStats,
   ConnectionStatus,
   MetricCommand,
   NewEvent,
+  ReceivedCounts,
   Snapshot,
   SpEvent
 } from '@shared/types'
@@ -16,6 +18,13 @@ import { SparkplugSession } from './session'
 
 /** Los eventos se mandan al renderer agrupados para no saturar el IPC */
 const FLUSH_MS = 100
+/** Cada cuanto se toma una muestra del caudal de las conexiones */
+const STATS_MS = 1_000
+/** Muestras que se promedian: el caudal es el de los ultimos 5 segundos */
+const STATS_SAMPLES = 5
+
+/** Lo recibido por una conexion en un intervalo, con lo que duro de verdad */
+type Sample = ReceivedCounts & { ms: number }
 
 /** Dueño de las sesiones MQTT: las crea, junta sus eventos y los reparte a las ventanas */
 export class SparkplugManager {
@@ -26,6 +35,10 @@ export class SparkplugManager {
   private pending: SpEvent[] = []
   private flushTimer: NodeJS.Timeout | null = null
   private lastEventId = 0
+  private readonly samples = new Map<string, Sample[]>()
+  private readonly statsTimer: NodeJS.Timeout
+  private lastSampleAt = performance.now()
+  private lastStats = '[]'
 
   constructor(
     private readonly store: ConnectionStore,
@@ -36,6 +49,7 @@ export class SparkplugManager {
     settings.onChange(({ maxEvents }) => {
       this.recent = trimEvents(this.recent, maxEvents, true)
     })
+    this.statsTimer = setInterval(() => this.sampleStats(), STATS_MS)
   }
 
   registerIpc(): void {
@@ -58,6 +72,7 @@ export class SparkplugManager {
   }
 
   async shutdown(): Promise<void> {
+    clearInterval(this.statsTimer)
     await Promise.all([...this.sessions.values()].map((session) => session.stop()))
   }
 
@@ -90,6 +105,7 @@ export class SparkplugManager {
       const wasActive = previous.active
       await previous.stop()
       this.sessions.delete(config.id)
+      this.samples.delete(config.id)
       this.push({
         connectionId: config.id,
         receivedAt: Date.now(),
@@ -106,6 +122,7 @@ export class SparkplugManager {
   private async remove(id: string): Promise<ConnectionConfig[]> {
     await this.sessions.get(id)?.stop()
     this.sessions.delete(id)
+    this.samples.delete(id)
     this.statuses.delete(id)
     this.configs = this.configs.filter((c) => c.id !== id)
     this.recent = this.recent.filter((event) => event.connectionId !== id)
@@ -145,6 +162,43 @@ export class SparkplugManager {
       this.pending = []
       if (batch.length) this.broadcast('sparkplug:batch', batch)
     }, FLUSH_MS)
+  }
+
+  /**
+   * Caudal de cada conexion conectada: lo recibido en las ultimas muestras sobre
+   * el tiempo que duraron, porque bajo carga el timer no llega justo cada segundo.
+   */
+  private sampleStats(): void {
+    const now = performance.now()
+    const ms = now - this.lastSampleAt
+    this.lastSampleAt = now
+    const stats: ConnectionStats[] = []
+    for (const [id, session] of this.sessions) {
+      const received = session.takeReceived()
+      if (this.statuses.get(id)?.state !== 'connected') {
+        this.samples.delete(id)
+        continue
+      }
+      const samples = this.samples.get(id) ?? []
+      samples.push({ ...received, ms })
+      if (samples.length > STATS_SAMPLES) samples.shift()
+      this.samples.set(id, samples)
+      const seconds = samples.reduce((sum, sample) => sum + sample.ms, 0) / 1000
+      const perSecond = (key: keyof ReceivedCounts): number =>
+        samples.reduce((sum, sample) => sum + sample[key], 0) / seconds
+      stats.push({
+        id,
+        messages: perSecond('messages'),
+        metrics: perSecond('metrics'),
+        bytes: perSecond('bytes'),
+        gaps: session.gaps
+      })
+    }
+    // en reposo no cambia nada: no hace falta redibujar una vez por segundo
+    const serialized = JSON.stringify(stats)
+    if (serialized === this.lastStats) return
+    this.lastStats = serialized
+    this.broadcast('sparkplug:stats', stats)
   }
 
   private broadcast(channel: string, payload: unknown): void {
