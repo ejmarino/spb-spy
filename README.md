@@ -220,8 +220,21 @@ conexión
     enciende el árbol.
   - Una métrica desplegada que quedó fuera de pantalla por el scroll no cuenta
     como oculta.
-- El buscador filtra por nombre de grupo, nodo, device o métrica, y deja a la
-  vista las coincidencias, sus ramas superiores y todo lo que cuelga de ellas.
+- El buscador compara con el nombre de cada fila: un tramo del id de grupo o de
+  nodo, el nodo, el device o la métrica, no el camino completo. Dos chips al
+  lado del cuadro eligen cómo buscar:
+  - **Regex** apagado: la fila contiene todas las palabras del texto. Encendido:
+    el nombre encaja con el texto como expresión regular, sin distinguir
+    mayúsculas. Una expresión que no compila marca el cuadro en rojo, con el
+    error al pasar el mouse, y deja el árbol sin filtrar.
+  - **Mostrar herencia** encendido: cada coincidencia aparece con su camino
+    arriba y abierta con todo lo suyo, para buscar un nodo o un device.
+    Apagado: solo las líneas que coinciden, una debajo de otra, para buscar una
+    métrica del mismo nombre a través de muchos devices.
+- Con la herencia a la vista el resultado se pliega como el árbol: el chevrón
+  abre o cierra cada rama y debajo de una coincidencia rigen las reglas de
+  siempre. Lo abierto y cerrado del resultado se conserva mientras se refina el
+  texto y se descarta al borrarlo; el árbol vuelve como estaba.
 - Las listas de más de 60 métricas arrancan colapsadas.
 - Un clic sobre una métrica abre el panel para
   [enviarle un comando](#envío-de-comandos). Las que el nodo declara de solo

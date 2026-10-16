@@ -19,11 +19,12 @@ import { engUnit, formatDateTime, formatTimestamp, formatValue, plural } from '.
 import { FLASH_MS, store, useStoreVersion } from '../store'
 import {
   buildTree,
-  defaultOpen,
   flattenTree,
   hiddenUpdateAt,
   isWritable,
   leafOf,
+  type Search as TreeSearch,
+  type SearchScope,
   type TreeItem
 } from '../tree'
 import { CommandPanel } from './CommandPanel'
@@ -50,6 +51,7 @@ function OfflineBadge({ count }: { count: number }): React.JSX.Element | null {
 function TreeRow({
   item,
   open,
+  flat,
   selected,
   hiddenUpdateAt,
   onToggle,
@@ -57,6 +59,8 @@ function TreeRow({
 }: {
   item: TreeItem
   open: boolean
+  /** Fila de una busqueda plana: sin sangria ni chevron, es una linea suelta */
+  flat: boolean
   selected: boolean
   /** Ultima actualizacion entre lo que cuelga de la fila y no esta en la lista */
   hiddenUpdateAt: number
@@ -163,8 +167,11 @@ function TreeRow({
 
   return (
     <div className={classes.join(' ')} onClick={writable ? onSelect : undefined}>
-      <span className="cell tree-name" style={{ paddingLeft: 8 + item.depth * INDENT }}>
-        {item.children.length ? (
+      <span
+        className="cell tree-name"
+        style={{ paddingLeft: 8 + (flat ? 0 : item.depth * INDENT) }}
+      >
+        {item.children.length && !flat ? (
           <button className="twisty" onClick={onToggle}>
             {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
           </button>
@@ -219,11 +226,48 @@ function TreeRow({
   )
 }
 
+/** Como se interpreta el texto buscado: la fila contiene todas las palabras, o encaja con la regex */
+type SearchMode = 'contains' | 'regex'
+
+/**
+ * Funcion de coincidencia para el texto, segun el modo. Con una regex que no
+ * compila no hay busqueda, y queda el error para mostrarlo en el cuadro.
+ */
+function compileSearch(
+  query: string,
+  mode: SearchMode,
+  scope: SearchScope
+): { search: TreeSearch | null; error: string | null } {
+  if (!query.trim()) return { search: null, error: null }
+  if (mode === 'regex') {
+    try {
+      const pattern = new RegExp(query, 'i')
+      return { search: { matches: (label) => pattern.test(label), scope }, error: null }
+    } catch (error) {
+      return { search: null, error: error instanceof Error ? error.message : String(error) }
+    }
+  }
+  const terms = query.toLowerCase().split(/\s+/).filter(Boolean)
+  const matches = (label: string): boolean => {
+    const lower = label.toLowerCase()
+    return terms.every((term) => lower.includes(term))
+  }
+  return { search: { matches, scope }, error: null }
+}
+
 export function TreeView({ active }: { active: boolean }): React.JSX.Element | null {
   useStoreVersion()
   const [query, setQuery] = useState('')
+  const [mode, setMode] = useState<SearchMode>('contains')
+  const [scope, setScope] = useState<SearchScope>('lineage')
   /** Solo lo que el usuario abrio o cerro a mano; el resto usa el estado por defecto */
   const [overrides, setOverrides] = useState<Map<string, boolean>>(new Map())
+  /**
+   * Lo mismo, pero dentro del resultado de una busqueda: empieza vacio con cada
+   * busqueda, se conserva mientras se refina el texto y se descarta al borrarlo
+   * o al cambiar el alcance, que redefine como arranca cada coincidencia.
+   */
+  const [searchOverrides, setSearchOverrides] = useState<Map<string, boolean>>(new Map())
   /** Fila elegida para mandarle un comando */
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
 
@@ -235,10 +279,16 @@ export function TreeView({ active }: { active: boolean }): React.JSX.Element | n
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [active, connections, structure, separator]
   )
-  const rows = useMemo(() => {
-    const isOpen = (item: TreeItem): boolean => overrides.get(item.key) ?? defaultOpen(item)
-    return flattenTree(roots, isOpen, query)
-  }, [roots, overrides, query])
+  const { search, error } = useMemo(() => compileSearch(query, mode, scope), [query, mode, scope])
+  const searching = search !== null
+  /** Busqueda plana: solo las lineas que coinciden, nada que abrir ni cerrar */
+  const flat = searching && scope === 'flat'
+  const decisions = searching ? searchOverrides : overrides
+  const setDecisions = searching ? setSearchOverrides : setOverrides
+  const { rows, open } = useMemo(
+    () => flattenTree(roots, (item) => decisions.get(item.key), search),
+    [roots, decisions, search]
+  )
   // las filas de la lista, esten o no en pantalla: lo que no esta aca destella en su rama
   const listed = useMemo(() => new Set(rows), [rows])
   // se busca por clave en cada pasada: el arbol se rearma cuando cambia su forma
@@ -257,19 +307,24 @@ export function TreeView({ active }: { active: boolean }): React.JSX.Element | n
   const selectedLeaf = selected && leafOf(selected)
   const target = selected && selectedLeaf && isWritable(selected, selectedLeaf) ? selected : null
 
-  const searching = query.trim() !== ''
-  const isOpen = (item: TreeItem): boolean =>
-    searching || (overrides.get(item.key) ?? defaultOpen(item))
-  const setAll = (open: boolean): void => {
+  const setAll = (value: boolean): void => {
     const next = new Map<string, boolean>()
     everyItem(roots, (item) => {
       // al colapsar todo quedan a la vista las conexiones
-      if (item.children.length) next.set(item.key, open)
+      if (item.children.length) next.set(item.key, value)
     })
-    setOverrides(next)
+    setDecisions(next)
   }
   const toggle = (item: TreeItem): void => {
-    setOverrides((current) => new Map(current).set(item.key, !isOpen(item)))
+    setDecisions((current) => new Map(current).set(item.key, !open.has(item)))
+  }
+  const changeQuery = (value: string): void => {
+    setQuery(value)
+    if (!value.trim()) setSearchOverrides(new Map())
+  }
+  const changeScope = (value: SearchScope): void => {
+    setScope(value)
+    setSearchOverrides(new Map())
   }
   const hasData = roots.some((root) => root.children.length)
 
@@ -284,30 +339,50 @@ export function TreeView({ active }: { active: boolean }): React.JSX.Element | n
           </p>
         </div>
         <div className="header-actions">
-          <button className="button" onClick={() => setAll(true)} disabled={searching}>
+          <button className="button" onClick={() => setAll(true)} disabled={flat}>
             <ChevronsUpDown size={14} /> Expandir todo
           </button>
-          <button className="button" onClick={() => setAll(false)} disabled={searching}>
+          <button className="button" onClick={() => setAll(false)} disabled={flat}>
             <ChevronsDownUp size={14} /> Colapsar todo
           </button>
         </div>
       </header>
 
       <div className="toolbar">
-        <label className="search">
+        <label className={`search${error ? ' is-invalid' : ''}`} title={error ?? undefined}>
           <Search size={14} />
           <input
             value={query}
-            placeholder="Buscar grupo, nodo, device o métrica…"
+            placeholder={
+              mode === 'regex'
+                ? 'Regex sobre el nombre de la fila…'
+                : 'Buscar grupo, nodo, device o métrica…'
+            }
             spellCheck={false}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => changeQuery(e.target.value)}
           />
           {query ? (
-            <button className="icon-button" onClick={() => setQuery('')} title="Borrar búsqueda">
+            <button className="icon-button" onClick={() => changeQuery('')} title="Borrar búsqueda">
               <X size={13} />
             </button>
           ) : null}
         </label>
+        <div className="chips">
+          <button
+            className={`chip chip-option${mode === 'regex' ? '' : ' is-off'}`}
+            onClick={() => setMode(mode === 'regex' ? 'contains' : 'regex')}
+            title="Interpretar el texto como expresión regular sobre el nombre de la fila, sin distinguir mayúsculas. Apagado: la fila contiene todas las palabras del texto"
+          >
+            Regex
+          </button>
+          <button
+            className={`chip chip-option${scope === 'lineage' ? '' : ' is-off'}`}
+            onClick={() => changeScope(scope === 'lineage' ? 'flat' : 'lineage')}
+            title="Mostrar cada coincidencia con su camino arriba y todo lo que cuelga de ella. Apagado: solo las líneas que coinciden, una debajo de otra"
+          >
+            Mostrar herencia
+          </button>
+        </div>
         <div className="legend">
           <span>
             <KindIcon kind="connection" /> Conexión
@@ -347,7 +422,8 @@ export function TreeView({ active }: { active: boolean }): React.JSX.Element | n
                 <TreeRow
                   key={item.key}
                   item={item}
-                  open={isOpen(item)}
+                  open={open.has(item)}
+                  flat={flat}
                   selected={item.key === target?.key}
                   hiddenUpdateAt={hiddenUpdateAt(item, listed)}
                   onToggle={() => toggle(item)}

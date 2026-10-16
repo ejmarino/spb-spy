@@ -291,38 +291,80 @@ export function defaultOpen(item: TreeItem): boolean {
   return direct <= AUTO_COLLAPSE_METRICS
 }
 
-/** Filas visibles en orden, segun lo que esta abierto y el texto buscado */
+/**
+ * Alcance de una busqueda: con herencia, cada coincidencia con su camino arriba
+ * y lo que cuelga de ella; plana, solo las lineas que coinciden.
+ */
+export type SearchScope = 'lineage' | 'flat'
+
+export interface Search {
+  /** Si el nombre simple de una fila coincide con lo buscado */
+  matches: (label: string) => boolean
+  scope: SearchScope
+}
+
+/**
+ * Papel de una fila en el resultado de una busqueda: coincide, lleva a una
+ * coincidencia, o cuelga de una. Las demas no se muestran.
+ */
+type Role = 'match' | 'ancestor' | 'descendant'
+
+export interface FlatTree {
+  /** Filas visibles, en orden */
+  rows: TreeItem[]
+  /** Filas con hijos que estan abiertas */
+  open: Set<TreeItem>
+}
+
+/**
+ * Filas visibles en orden, segun lo que esta abierto y lo que se busca.
+ * `decided` es lo que el usuario abrio o cerro a mano; donde no decidio, una
+ * fila arranca segun `defaultOpen`, y en una busqueda con herencia segun su
+ * papel: un ancestro abierto, porque si no no se veria la coincidencia; una
+ * coincidencia abierta; y lo que cuelga de una coincidencia como en el arbol
+ * normal. Asi el chevron funciona igual con o sin texto. Una busqueda plana
+ * lista solo las coincidencias, en el orden del arbol, sin nada abierto.
+ */
 export function flattenTree(
   roots: TreeItem[],
-  isOpen: (item: TreeItem) => boolean,
-  query: string
-): TreeItem[] {
+  decided: (item: TreeItem) => boolean | undefined,
+  search: Search | null
+): FlatTree {
   const rows: TreeItem[] = []
-  const terms = query.toLowerCase().split(/\s+/).filter(Boolean)
+  const open = new Set<TreeItem>()
 
-  if (!terms.length) {
-    const walk = (item: TreeItem): void => {
-      rows.push(item)
-      if (isOpen(item)) item.children.forEach(walk)
+  const roles = new Map<TreeItem, Role>()
+  if (search) {
+    const mark = (item: TreeItem, underMatch: boolean): boolean => {
+      const self = search.matches(item.label)
+      let below = false
+      for (const child of item.children) below = mark(child, underMatch || self) || below
+      if (self) roles.set(item, 'match')
+      else if (underMatch) roles.set(item, 'descendant')
+      else if (below) roles.set(item, 'ancestor')
+      return self || below
     }
-    roots.forEach(walk)
-    return rows
+    for (const root of roots) mark(root, false)
   }
 
-  // con busqueda: queda lo que coincide, sus ancestros y todo lo que cuelga de una coincidencia
-  const matches = (item: TreeItem): boolean => {
-    const label = item.label.toLowerCase()
-    return terms.every((term) => label.includes(term))
+  if (search?.scope === 'flat') {
+    const list = (item: TreeItem): void => {
+      if (roles.get(item) === 'match') rows.push(item)
+      item.children.forEach(list)
+    }
+    roots.forEach(list)
+    return { rows, open }
   }
-  const walk = (item: TreeItem, inherited: boolean): boolean => {
-    const self = inherited || matches(item)
-    const start = rows.length
+
+  const walk = (item: TreeItem): void => {
+    const role = roles.get(item)
+    if (search && !role) return
     rows.push(item)
-    let below = false
-    for (const child of item.children) below = walk(child, self) || below
-    if (!self && !below) rows.length = start
-    return self || below
+    const isOpen = decided(item) ?? (role === 'descendant' || !role ? defaultOpen(item) : true)
+    if (!isOpen) return
+    if (item.children.length) open.add(item)
+    item.children.forEach(walk)
   }
-  for (const root of roots) walk(root, false)
-  return rows
+  roots.forEach(walk)
+  return { rows, open }
 }

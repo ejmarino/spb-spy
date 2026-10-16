@@ -447,6 +447,17 @@ textarea {
   text-decoration: line-through;
 }
 
+/* opcion que se enciende y apaga: apagada no es "excluida", solo "no" */
+.chip-option.is-off {
+  text-decoration: none;
+}
+
+/* el texto del buscador no compila como regex */
+.search.is-invalid,
+.search.is-invalid:focus-within {
+  border-color: var(--red);
+}
+
 .chip-type {
   --chip: var(--type);
   font-family: var(--mono);
