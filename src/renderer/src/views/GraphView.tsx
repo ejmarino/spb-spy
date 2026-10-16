@@ -1,13 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import {
-  forceCollide,
-  forceLink,
-  forceManyBody,
-  forceSimulation,
-  forceX,
-  forceY,
-  type ForceLink
-} from 'd3-force'
+import { forceCollide, forceLink, forceManyBody, forceSimulation, type ForceLink } from 'd3-force'
 import { Maximize } from 'lucide-react'
 import type { Liveness } from '@shared/types'
 import { KindIcon, LivenessPill } from '../components/badges'
@@ -16,6 +8,7 @@ import {
   boundsOf,
   buildGraph,
   chainOf,
+  COLLIDE_GAP,
   detectPulses,
   dotOffsets,
   DOT_RADIUS,
@@ -23,7 +16,8 @@ import {
   hitTest,
   type Graph,
   type GraphElement,
-  type Hit
+  type Hit,
+  type PulseKind
 } from '../graph'
 import { FLASH_MS, store } from '../store'
 import { buildTree, latestUpdateAt, leafOf } from '../tree'
@@ -32,20 +26,29 @@ import { buildTree, latestUpdateAt, leafOf } from '../tree'
  * Aspecto y movimiento del grafo. Las distancias estan en unidades del grafo
  * (un pixel con zoom 1) salvo las que dicen "pantalla".
  */
-/** Espacio libre entre un elemento y su padre, ademas de lo que ocupan sus puntos */
-const LINK_GAP = 26
+/** Fuerza del enlace de un elemento con su padre; el largo lo mide el grafo */
 const LINK_STRENGTH = 0.7
 /** Cuanto se afloja el enlace con cada hermano mas: 0 no afloja, 1 reparte la fuerza */
 const LINK_CROWDING = 0.5
+/**
+ * Cuanto se afloja el enlace con cada hijo mas del propio elemento. Suave: los
+ * hijos ya lo vuelven un ancla, y lo que hace falta es que la colision pueda
+ * terminar de repartir a los hermanos cargados alrededor del padre.
+ */
+const LINK_LOAD = 0.25
 /** Repulsion entre elementos: una base mas lo que suma cada uno por lo que ocupa */
 const REPULSION = -70
 const REPULSION_PER_RADIUS = -3
 /** Mas lejos que esto los elementos no se empujan: los grafos sueltos no se alejan */
 const REPULSION_REACH = 500
-/** Separacion entre lo que ocupan dos elementos; deja lugar para el nombre */
-const COLLIDE_GAP = 14
-/** Fuerza que evita que los grafos de las conexiones se alejen sin limite */
-const CENTERING = 0.03
+/**
+ * Fuerza, apenas la justa, que lleva el centro del grafo de cada conexion hacia
+ * el origen, para que los grafos de las conexiones no se vayan a la deriva. Una
+ * conexion con algo fijado ya esta anclada y no se centra. El tiron va parejo a
+ * todos los elementos de la conexion: tirar de cada uno segun su propio lugar
+ * deformaria lo que cuelga de un elemento fijado.
+ */
+const CENTERING = 0.01
 /** Radio del circulo en el que nacen las conexiones cuando hay mas de una */
 const ROOT_SPREAD = 400
 /** Temperatura de la simulacion al acomodar cambios en un grafo ya armado: tope y piso */
@@ -110,6 +113,9 @@ const GLOW_RADIUS = DOT_RADIUS * 4.5
 /** Mas claro que el halo de reposo, para que lo recien actualizado se distinga */
 const GLOW_COLOR = '#bfe0ff'
 const PULSE_GLOW_RADIUS = PULSE_RADIUS * 4.5
+/** El pulso de un DEATH resplandece mas que el de los datos, y su estela es mas densa */
+const DEATH_GLOW_RADIUS = PULSE_RADIUS * 7
+const PULSE_TRAIL_ALPHA = { data: 0.6, death: 0.8 }
 /** Halo de un elemento, en veces su radio */
 const ELEMENT_HALO = 3.6
 const ELEMENT_HALO_ALPHA = 0.7
@@ -120,6 +126,9 @@ const OFFLINE_COLOR = '#4a5262'
 const METRIC_CORE = '#c9d2e6'
 const METRIC_HALO = '#5f8cff'
 const STALE_ALPHA = 0.45
+/** Marca de un elemento fijado: una rayita vertical, en veces el radio del disco, y su grosor */
+const PIN_LENGTH = 1.2
+const PIN_WIDTH = 1.4
 
 interface Link {
   source: GraphElement
@@ -129,6 +138,7 @@ interface Link {
 interface Pulse {
   chain: GraphElement[]
   startedAt: number
+  kind: PulseKind
 }
 
 /** Puntos de un elemento con su inercia: x, y, velocidad x, velocidad y de cada uno */
@@ -156,6 +166,7 @@ interface Palette {
   text: string
   muted: string
   accent: string
+  red: string
   font: string
   kind: Record<'group' | 'node' | 'device' | 'metric' | 'template', string>
 }
@@ -169,6 +180,7 @@ function readPalette(element: Element): Palette {
     text: read('--text-2'),
     muted: read('--muted'),
     accent: read('--accent'),
+    red: read('--red'),
     font: style.fontFamily,
     kind: {
       group: read('--kind-group'),
@@ -245,12 +257,14 @@ function alphaOf(status: Liveness | undefined): number {
 class GraphEngine {
   private graph: Graph = { elements: [], byKey: new Map() }
   private readonly links = forceLink<GraphElement, Link>()
-    .distance((link) => link.source.radius + link.target.radius + LINK_GAP)
-    // cuantos mas hermanos, menos tira cada enlace: si no, se amontonan sobre el padre
-    .strength((link) => LINK_STRENGTH / link.target.children.length ** LINK_CROWDING) as ForceLink<
-    GraphElement,
-    Link
-  >
+    .distance((link) => link.source.linkLength)
+    // cuantos mas hermanos y mas hijos, menos tira cada enlace: si no, se amontonan sobre el padre
+    .strength(
+      (link) =>
+        LINK_STRENGTH /
+        (link.target.children.length ** LINK_CROWDING *
+          (link.source.children.length + 1) ** LINK_LOAD)
+    ) as ForceLink<GraphElement, Link>
   private readonly simulation = forceSimulation<GraphElement>()
     .force('link', this.links)
     .force(
@@ -263,8 +277,7 @@ class GraphEngine {
       'collide',
       forceCollide<GraphElement>((element) => element.radius + COLLIDE_GAP).iterations(3)
     )
-    .force('x', forceX<GraphElement>(0).strength(CENTERING))
-    .force('y', forceY<GraphElement>(0).strength(CENTERING))
+    .force('center', (alpha) => this.applyCentering(alpha))
     .force('bond', () => this.applyBonds())
     .alphaDecay(COOLING)
     .stop()
@@ -275,8 +288,9 @@ class GraphEngine {
   /** Todavia no se mostro nada: el primer encuadre va directo, sin animacion */
   private unframed = true
   private built: { connections: unknown; structure: number; separator: string | null } | null = null
-  /** Ultimo DATA ya contado de cada nodo y device, para detectar los pulsos */
+  /** Ultimo DATA y ultima muerte ya contados de cada nodo y device, para detectar los pulsos */
   private readonly seen = new Map<string, number>()
+  private readonly deaths = new Map<string, number>()
   private pulses: Pulse[] = []
   private readonly lastPulse = new Map<string, number>()
   /** Donde esta la cabeza de cada pulso en el cuadro que se esta dibujando */
@@ -308,6 +322,7 @@ class GraphEngine {
     this.onHover = onHover
     // lo que paso con la vista cerrada no se anima al volver
     this.seen.clear()
+    this.deaths.clear()
     this.pulses = []
 
     const resize = new ResizeObserver(() => this.resize())
@@ -329,6 +344,8 @@ class GraphEngine {
       const hit = hitTest(this.graph, world.x, world.y, HOVER_REACH / this.camera.k)
       if (!hit) return
       const { element } = hit
+      // con ctrl, o cmd en macOS, el click fija el elemento donde esta o lo suelta
+      if (event.ctrlKey || event.metaKey) this.togglePin(element)
       this.grab = { key: element.key, dx: element.x - world.x, dy: element.y - world.y }
       this.hold(at)
       // enfriada no avanza: hay que calentarla ademas de pedirle que se mantenga asi
@@ -376,6 +393,44 @@ class GraphEngine {
       this.context = null
       this.release()
       this.pointer = null
+    }
+  }
+
+  /**
+   * Centrado: todos los elementos de una conexion libre reciben el mismo tiron,
+   * el que lleva el centro de su grafo hacia el origen. Una conexion con algo
+   * fijado no se centra, y lo que se fija en una conexion no afecta a las otras.
+   * En conjunto es la misma fuerza que centrar cada elemento por su cuenta, pero
+   * sin deformar el grafo.
+   */
+  private applyCentering(alpha: number): void {
+    const rootOf = (element: GraphElement): GraphElement => {
+      while (element.parent) element = element.parent
+      return element
+    }
+    /** Suma de posiciones y cantidad de elementos de cada conexion; null si esta anclada */
+    const graphs = new Map<GraphElement, { x: number; y: number; count: number } | null>()
+    for (const element of this.graph.elements) {
+      const root = rootOf(element)
+      if (element.pinned) {
+        graphs.set(root, null)
+        continue
+      }
+      const sum = graphs.get(root)
+      if (sum === null) continue
+      if (sum) {
+        sum.x += element.x
+        sum.y += element.y
+        sum.count++
+      } else {
+        graphs.set(root, { x: element.x, y: element.y, count: 1 })
+      }
+    }
+    for (const element of this.graph.elements) {
+      const sum = graphs.get(rootOf(element))
+      if (!sum) continue
+      element.vx = (element.vx ?? 0) - (sum.x / sum.count) * CENTERING * alpha
+      element.vy = (element.vy ?? 0) - (sum.y / sum.count) * CENTERING * alpha
     }
   }
 
@@ -429,10 +484,24 @@ class GraphEngine {
     element.fy = world.y + this.grab.dy
   }
 
-  /** Suelta lo que se estaba arrastrando: el elemento vuelve a quedar sujeto a las fuerzas */
+  /** Fija el elemento donde esta, o lo suelta si ya estaba fijado */
+  private togglePin(element: GraphElement): void {
+    element.pinned = !element.pinned
+    if (element.pinned) {
+      element.fx = element.x
+      element.fy = element.y
+    } else {
+      element.fx = element.fy = null
+    }
+  }
+
+  /**
+   * Suelta lo que se estaba arrastrando: el elemento vuelve a quedar sujeto a
+   * las fuerzas, salvo que este fijado, que se queda donde se lo solto.
+   */
   private release(): void {
     const element = this.grab && this.graph.byKey.get(this.grab.key)
-    if (element) element.fx = element.fy = null
+    if (element && !element.pinned) element.fx = element.fy = null
     if (this.grab) this.simulation.alphaTarget(0)
     this.grab = null
     this.drag = null
@@ -465,11 +534,13 @@ class GraphEngine {
     }
 
     const now = performance.now()
-    for (const origin of detectPulses(this.graph, this.seen)) {
-      // con mensajes muy seguidos alcanza un pulso por tramo: la rama queda encendida
-      if (now - (this.lastPulse.get(origin.key) ?? -Infinity) < PULSE_SEGMENT_MS) continue
-      this.lastPulse.set(origin.key, now)
-      if (origin.parent) this.pulses.push({ chain: chainOf(origin), startedAt: now })
+    for (const { element: origin, kind } of detectPulses(this.graph, this.seen, this.deaths)) {
+      if (kind === 'data') {
+        // con mensajes muy seguidos alcanza un pulso por tramo: la rama queda encendida
+        if (now - (this.lastPulse.get(origin.key) ?? -Infinity) < PULSE_SEGMENT_MS) continue
+        this.lastPulse.set(origin.key, now)
+      }
+      if (origin.parent) this.pulses.push({ chain: chainOf(origin), startedAt: now, kind })
     }
     this.awakeUntil = now + FLASH_MS + 200
     this.wake()
@@ -482,7 +553,7 @@ class GraphEngine {
   private rebuild(next: Graph): void {
     const previous = this.graph.byKey
     const roots = next.elements.filter((element) => !element.parent)
-    /** Elementos que nacen o cambian de tamaño; con los que se van, lo que hay que acomodar */
+    /** Elementos que nacen, cambian de tamaño o de largo de enlace; con los que se van, lo que hay que acomodar */
     let moved = 0
     const gone = previous.size > 0 && [...previous.keys()].some((key) => !next.byKey.has(key))
     /** Elementos que ya tienen lugar: los que estaban y los que van naciendo */
@@ -496,7 +567,8 @@ class GraphEngine {
       element.vy = old.vy
       element.fx = old.fx
       element.fy = old.fy
-      if (old.radius !== element.radius) moved++
+      element.pinned = old.pinned
+      if (old.radius !== element.radius || old.linkLength !== element.linkLength) moved++
       placed.add(element)
     }
     for (const element of next.elements) {
@@ -506,7 +578,7 @@ class GraphEngine {
       if (parent) {
         const angle = freeAngle(parent, placed)
         // por fuera de los hermanos que ya estan: nacer entre ellos los desacomoda
-        let distance = parent.radius + element.radius + LINK_GAP
+        let distance = element.linkLength
         for (const sibling of parent.children) {
           if (!placed.has(sibling)) continue
           const reach = Math.hypot(sibling.x - parent.x, sibling.y - parent.y)
@@ -896,6 +968,21 @@ class GraphEngine {
       }
     })
 
+    // un elemento fijado lleva una rayita blanca dentro del disco, que escala con el
+    context.strokeStyle = '#fff'
+    context.lineWidth = PIN_WIDTH
+    context.lineCap = 'round'
+    for (const element of visible) {
+      if (!element.pinned) continue
+      const half = (ELEMENT_RADIUS[element.kind] * PIN_LENGTH) / 2
+      context.globalAlpha = alphaOf(element.status)
+      context.beginPath()
+      context.moveTo(element.x, element.y - half)
+      context.lineTo(element.x, element.y + half)
+      context.stroke()
+    }
+    context.lineCap = 'butt'
+
     // los nombres van en tamaño de pantalla, sin escalar con el zoom
     context.setTransform(ratio, 0, 0, ratio, 0, 0)
     context.textAlign = 'center'
@@ -921,7 +1008,8 @@ class GraphEngine {
 
   /**
    * La luz de los pulsos: cada uno avanza un tramo por vez hacia la conexion,
-   * con una estela. Deja anotado donde va cada cabeza para dibujarla despues.
+   * con una estela, del color de acento los datos y rojo un DEATH. Deja anotado
+   * donde va cada cabeza para dibujarla despues, blanca en los dos casos.
    */
   private drawPulseLight(context: CanvasRenderingContext2D, palette: Palette): void {
     const now = performance.now()
@@ -929,11 +1017,11 @@ class GraphEngine {
       (pulse) => (now - pulse.startedAt) / PULSE_SEGMENT_MS < pulse.chain.length - 1
     )
     this.pulseHeads = []
-    const glow = haloSprite(palette.accent)
     context.lineCap = 'round'
-    context.strokeStyle = palette.accent
     context.lineWidth = PULSE_RADIUS
-    for (const { chain, startedAt } of this.pulses) {
+    for (const { chain, startedAt, kind } of this.pulses) {
+      const color = kind === 'death' ? palette.red : palette.accent
+      const glowRadius = kind === 'death' ? DEATH_GLOW_RADIUS : PULSE_GLOW_RADIUS
       const progress = (now - startedAt) / PULSE_SEGMENT_MS
       const segment = Math.floor(progress)
       const from = chain[segment]
@@ -942,18 +1030,19 @@ class GraphEngine {
       const tail = Math.max(0, head - PULSE_TAIL)
       const x = from.x + (to.x - from.x) * head
       const y = from.y + (to.y - from.y) * head
-      context.globalAlpha = 0.6
+      context.globalAlpha = PULSE_TRAIL_ALPHA[kind]
+      context.strokeStyle = color
       context.beginPath()
       context.moveTo(from.x + (to.x - from.x) * tail, from.y + (to.y - from.y) * tail)
       context.lineTo(x, y)
       context.stroke()
       context.globalAlpha = 1
       context.drawImage(
-        glow,
-        x - PULSE_GLOW_RADIUS,
-        y - PULSE_GLOW_RADIUS,
-        PULSE_GLOW_RADIUS * 2,
-        PULSE_GLOW_RADIUS * 2
+        haloSprite(color),
+        x - glowRadius,
+        y - glowRadius,
+        glowRadius * 2,
+        glowRadius * 2
       )
       this.pulseHeads.push({ x, y })
     }
@@ -1095,6 +1184,9 @@ export function GraphView({ active }: { active: boolean }): React.JSX.Element | 
           </span>
           <span>
             <KindIcon kind="template" /> UDT
+          </span>
+          <span title="Ctrl+click (cmd+click en macOS) fija un elemento en su lugar; otro ctrl+click lo suelta">
+            <span className="graph-legend-pin" /> Ctrl+click fija
           </span>
         </div>
         {tip ? <GraphTip tip={tip} /> : null}

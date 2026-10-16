@@ -1903,6 +1903,16 @@ textarea {
   border-radius: 50%;
 }
 
+/* disco con la rayita blanca, como se marca un elemento fijado */
+.graph-legend-pin {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background:
+    linear-gradient(#fff, #fff) center / 1.5px 7px no-repeat,
+    var(--kind-node);
+}
+
 .graph-tip {
   position: absolute;
   z-index: 2;

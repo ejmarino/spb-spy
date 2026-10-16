@@ -5,6 +5,18 @@ import type { TreeItem } from './tree'
 /** Radio del disco de un elemento y de un punto, en unidades del grafo */
 export const ELEMENT_RADIUS = { connection: 9, group: 7, node: 6.5, device: 5.5 }
 export const DOT_RADIUS = 2
+/** Espacio libre entre un elemento y su padre, ademas de lo que ocupan */
+export const LINK_GAP = 26
+/** Separacion entre lo que ocupan dos elementos; deja lugar para el nombre */
+export const COLLIDE_GAP = 14
+/** Cuanto mas grande que la raiz de la suma de sus discos es el que empaqueta a los hijos */
+const PACKING = 1.1
+/**
+ * Hijos que no empujan al padre: caben del lado lejano, a la distancia base, sin
+ * rodear al elemento. Dos hijos grandes quedan uno a cada lado y dejan libre el
+ * camino al padre; del tercero en adelante lo rodean.
+ */
+const FREE_CHILDREN = 2
 /** Separacion de la espiral: el radio del punto i crece con raiz de i */
 const DOT_SPACING = 3.4
 /** Hueco que la espiral deja libre alrededor del disco del elemento */
@@ -32,6 +44,17 @@ export interface GraphElement {
   dots: TreeItem[]
   /** Radio que ocupa el elemento con sus puntos */
   radius: number
+  /**
+   * Radio hasta donde los hijos rodean al elemento: el disco en que se
+   * empaquetan, sin los que caben del lado lejano. Al menos `radius`.
+   */
+  spread: number
+  /** Radio de lo que ocupa el elemento con todo lo que cuelga de el */
+  footprint: number
+  /** Largo de reposo del enlace con su padre; 0 en una conexion */
+  linkLength: number
+  /** Fijado por el usuario: las fuerzas no lo mueven */
+  pinned: boolean
   x: number
   y: number
   vx?: number
@@ -79,9 +102,46 @@ function isDot(item: TreeItem): boolean {
 }
 
 /**
+ * Largo de reposo del enlace de cada hijo con `element`, y hasta donde llega
+ * `element` con todo lo suyo. Los hijos ya tienen lo suyo medido.
+ *
+ * El largo base deja la holgura entre los dos discos. Si los hijos del hijo lo
+ * rodean, el enlace crece hasta dejar al padre afuera de ese circulo. Y entre
+ * hermanos rodeados, crece hasta que la cuerda entre vecinos en el anillo
+ * alrededor del padre alcance para los dos circulos. Las hojas, los hijos con
+ * pocos hijos y las cadenas de hijo unico quedan con el largo base: se
+ * empaquetan por la colision, con lo suyo del lado lejano del padre, y una
+ * cadena no se estira por lo que cuelga al final.
+ */
+function measure(element: GraphElement): void {
+  const { children } = element
+  const surrounded = children.filter((child) => child.spread > child.radius)
+  const ring = surrounded.length >= 2 ? 2 * Math.sin(Math.PI / surrounded.length) : 0
+  let reach = element.radius
+  for (const child of children) {
+    let length = element.radius + child.spread + LINK_GAP
+    if (ring && child.spread > child.radius) {
+      let other = 0
+      for (const sibling of surrounded) {
+        if (sibling !== child) other = Math.max(other, sibling.spread)
+      }
+      length = Math.max(length, (child.spread + other) / ring)
+    }
+    child.linkLength = length
+    reach = Math.max(reach, length + child.footprint)
+  }
+  const sizes = children.map((child) => child.footprint + COLLIDE_GAP).sort((a, b) => b - a)
+  let packed = 0
+  for (let i = 0; i < sizes.length - FREE_CHILDREN; i++) packed += sizes[i] ** 2
+  element.spread = Math.max(element.radius, PACKING * Math.sqrt(packed))
+  element.footprint = Math.max(element.spread, reach)
+}
+
+/**
  * Arma el grafo a partir del arbol de datos: un elemento por conexion, grupo,
  * nodo, device y rama intermedia, y un punto por metrica. Las metricas propias
- * de un nodo van alrededor del nodo, y un UDT es un solo punto.
+ * de un nodo van alrededor del nodo, y un UDT es un solo punto. Cada elemento
+ * queda medido con lo que cuelga de el y con el largo de su enlace.
  */
 export function buildGraph(roots: TreeItem[]): Graph {
   const graph: Graph = { elements: [], byKey: new Map() }
@@ -97,6 +157,10 @@ export function buildGraph(roots: TreeItem[]): Graph {
       state: item.node ?? item.device,
       dots: [],
       radius: 0,
+      spread: 0,
+      footprint: 0,
+      linkLength: 0,
+      pinned: false,
       x: 0,
       y: 0
     }
@@ -109,6 +173,7 @@ export function buildGraph(roots: TreeItem[]): Graph {
       else add(child, element)
     }
     element.radius = occupiedRadius(kind, element.dots.length)
+    measure(element)
     // el estado de un nodo o device cambia junto con la forma del arbol, asi que no envejece
     if (kind !== 'connection') {
       element.status = element.state?.status ?? inheritedStatus(element.children)
@@ -135,21 +200,64 @@ function lastDataAt(state: DeviceState): number {
   return at
 }
 
+export type PulseKind = 'data' | 'death'
+
+export interface PulseOrigin {
+  element: GraphElement
+  kind: PulseKind
+}
+
+/** Nodo del que depende un device: el primer ancestro con estado */
+function nodeOf(element: GraphElement): GraphElement | null {
+  for (let at = element.parent; at; at = at.parent) if (at.state) return at
+  return null
+}
+
 /**
- * Nodos y devices que publicaron datos desde la pasada anterior. `seen` guarda
- * por elemento el ultimo DATA ya contado; un elemento que se ve por primera vez
- * queda anotado sin contar como actividad.
+ * Momento en que un nodo o device paso a fuera de linea; 0 si no lo esta. Un
+ * DEATH llega como ese estado con un `statusAt` nuevo: el renderer no ve el
+ * mensaje. La caida del enlace con el broker deja `stale`, asi que no cuenta.
  */
-export function detectPulses(graph: Graph, seen: Map<string, number>): GraphElement[] {
-  const origins: GraphElement[] = []
+function diedAt(state: DeviceState): number {
+  return state.status === 'offline' ? state.statusAt : 0
+}
+
+/**
+ * Un device que se apago en el mismo instante que su nodo cayo con el NDEATH
+ * del nodo: el modelo apaga a los dos con un solo momento. Pulsa el nodo.
+ */
+function diedWithNode(element: GraphElement): boolean {
+  const node = nodeOf(element)
+  return node?.state?.status === 'offline' && node.state.statusAt === element.state?.statusAt
+}
+
+/**
+ * Nodos y devices que publicaron datos o murieron desde la pasada anterior.
+ * `seen` guarda por elemento el ultimo DATA ya contado y `deaths` el ultimo
+ * momento de muerte contado; un elemento que se ve por primera vez queda
+ * anotado sin contar como actividad.
+ */
+export function detectPulses(
+  graph: Graph,
+  seen: Map<string, number>,
+  deaths: Map<string, number>
+): PulseOrigin[] {
+  const origins: PulseOrigin[] = []
   for (const element of graph.elements) {
     if (!element.state) continue
     const at = lastDataAt(element.state)
     const before = seen.get(element.key)
-    if (before !== undefined && at > before) origins.push(element)
+    if (before !== undefined && at > before) origins.push({ element, kind: 'data' })
     seen.set(element.key, at)
+    const died = diedAt(element.state)
+    const diedBefore = deaths.get(element.key)
+    if (diedBefore !== undefined && died > diedBefore && !diedWithNode(element)) {
+      origins.push({ element, kind: 'death' })
+    }
+    deaths.set(element.key, died)
   }
   for (const key of seen.keys()) if (!graph.byKey.has(key)) seen.delete(key)
+  for (const key of deaths.keys()) if (!graph.byKey.has(key)) deaths.delete(key)
   return origins
 }
 

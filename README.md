@@ -256,6 +256,10 @@ la actividad y no para leer valores:
 - Cada mensaje de datos manda un pulso por las líneas, desde el nodo o device
   que lo publicó hasta su conexión. Si los mensajes llegan muy seguidos
   comparten pulso: la rama queda encendida mientras dura el tráfico.
+- Un NDEATH o un DDEATH manda por el mismo camino un pulso rojo, con más
+  resplandor, desde el nodo o device que murió. Un NDEATH manda uno solo, el del
+  nodo, aunque sus devices se apaguen con él. Un BIRTH y la caída del enlace con
+  el broker no mandan pulso.
 - Un nodo o device offline se ve en gris, con sus puntos; uno sin confirmación
   en vivo, atenuado. Un grupo o una rama intermedia toman el estado de lo que
   cuelga de ellos.
@@ -267,6 +271,14 @@ la actividad y no para leer valores:
   puntos, y llevarlo a otro lado; al soltarlo vuelve a quedar sujeto a las
   fuerzas y todo se reacomoda. Los puntos siguen a su elemento con un pequeño
   retraso.
+- Cada elemento descansa de su padre a una distancia que deja lugar a lo que
+  cuelga de él: un nodo con muchos devices queda lejos de su rama, fuera del
+  círculo que ocupan, y dos hermanos cargados se abren hasta no pisarse. Los que
+  tienen pocos hijos quedan igual de cerca que uno sin hijos.
+- Con ctrl-click (cmd-click en macOS) un elemento queda fijado en su lugar: el
+  grafo se acomoda a su alrededor sin moverlo, y se marca con una rayita blanca
+  dentro del círculo. Se lo puede seguir llevando con el mouse, y queda fijado
+  donde se lo suelta; otro ctrl-click lo suelta.
 - Las conexiones se rechazan entre sí, pero se pueden unir: si se acerca una a
   otra rápido con el mouse quedan pegadas, con un lazo de luz entre las dos. Al
   mover una despacio la otra la acompaña; con un tirón se sueltan.
